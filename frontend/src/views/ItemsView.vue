@@ -63,8 +63,7 @@
           </div>
           
           <div class="item-details">
-            <p v-if="item.brand"><strong>Brand:</strong> {{ item.brand }}</p>
-            <p v-if="item.model"><strong>Model:</strong> {{ item.model }}</p>
+            <p v-if="item.brand || item.model">{{ [item.brand, item.model].filter(Boolean).join(' ') }}</p>
             <p v-if="item.category" class="category-display">
               <strong>Category:</strong>
               <span class="category-badge" :style="{ backgroundColor: item.category.color }">
@@ -72,6 +71,7 @@
               </span>
             </p>
             <p v-if="item.purchasePrice"><strong>Purchase:</strong> ${{ parseFloat(item.purchasePrice).toFixed(2) }}</p>
+            <p><strong>Add. Costs:</strong> ${{ calculateAdditionalCosts(item).toFixed(2) }}</p>
             <p v-if="item.salePrice"><strong>Sale:</strong> ${{ parseFloat(item.salePrice).toFixed(2) }}</p>
           </div>
           
@@ -164,6 +164,11 @@ const filters = ref({
 })
 
 const categories = ref([])
+
+const calculateAdditionalCosts = (item) => {
+  if (!item.additionalCosts?.length) return 0
+  return item.additionalCosts.reduce((sum, cost) => sum + parseFloat(cost.amount || 0), 0)
+}
 
 const applyFilters = () => {
   filters.value.page = 1

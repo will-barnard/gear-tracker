@@ -133,17 +133,25 @@ const categoriesWithStats = computed(() => {
     const ownedItems = categoryItems.filter(item => item.status === 'owned')
     const soldItems = categoryItems.filter(item => item.status === 'sold')
     
-    const currentValue = ownedItems.reduce((sum, item) => 
-      sum + parseFloat(item.purchasePrice || 0), 0
-    )
+    // Calculate current value including additional costs
+    const currentValue = ownedItems.reduce((sum, item) => {
+      const purchasePrice = parseFloat(item.purchasePrice || 0)
+      const additionalCosts = item.additionalCosts?.reduce((costSum, cost) => 
+        costSum + parseFloat(cost.amount || 0), 0) || 0
+      return sum + purchasePrice + additionalCosts
+    }, 0)
     
     const totalRevenue = soldItems.reduce((sum, item) => 
       sum + parseFloat(item.salePrice || 0), 0
     )
     
-    const totalCost = soldItems.reduce((sum, item) => 
-      sum + parseFloat(item.purchasePrice || 0), 0
-    )
+    // Calculate total cost including additional costs for sold items
+    const totalCost = soldItems.reduce((sum, item) => {
+      const purchasePrice = parseFloat(item.purchasePrice || 0)
+      const additionalCosts = item.additionalCosts?.reduce((costSum, cost) => 
+        costSum + parseFloat(cost.amount || 0), 0) || 0
+      return sum + purchasePrice + additionalCosts
+    }, 0)
     
     const profit = totalRevenue - totalCost
     

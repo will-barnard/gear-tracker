@@ -63,7 +63,12 @@
           </div>
           
           <div class="detail-card card full-width">
-            <h3>Additional Costs</h3>
+            <div class="costs-header">
+              <h3>Additional Costs</h3>
+              <button @click="showAddCostModal = true" class="btn btn-primary btn-sm">
+                Add Cost
+              </button>
+            </div>
             <div v-if="item.additionalCosts?.length">
               <table class="costs-table">
                 <thead>
@@ -72,6 +77,7 @@
                     <th>Description</th>
                     <th>Type</th>
                     <th>Amount</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -80,11 +86,19 @@
                     <td data-label="Description">{{ cost.description }}</td>
                     <td data-label="Type">{{ cost.type || '-' }}</td>
                     <td data-label="Amount">${{ parseFloat(cost.amount).toFixed(2) }}</td>
+                    <td data-label="Actions">
+                      <button @click="editCost(cost)" class="btn-icon" title="Edit">
+                        ✏️
+                      </button>
+                      <button @click="deleteCost(cost.id)" class="btn-icon" title="Delete">
+                        🗑️
+                      </button>
+                    </td>
                   </tr>
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colspan="3"><strong>Total Additional Costs</strong></td>
+                    <td colspan="4"><strong>Total Additional Costs</strong></td>
                     <td><strong>${{ totalAdditionalCosts.toFixed(2) }}</strong></td>
                   </tr>
                 </tfoot>
@@ -105,6 +119,69 @@
         </div>
       </div>
     </div>
+
+    <!-- Add/Edit Cost Modal -->
+    <div v-if="showAddCostModal || editingCost" class="modal-overlay" @click.self="closeCostModal">
+      <div class="modal-content">
+        <h3>{{ editingCost ? 'Edit Cost' : 'Add Cost' }}</h3>
+        <form @submit.prevent="saveCost">
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input
+              v-model="costForm.date"
+              type="date"
+              class="form-input"
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Description *</label>
+            <input
+              v-model="costForm.description"
+              type="text"
+              class="form-input"
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Type</label>
+            <input
+              v-model="costForm.type"
+              type="text"
+              class="form-input"
+              placeholder="e.g., Repair, Shipping, Parts"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Amount *</label>
+            <input
+              v-model="costForm.amount"
+              type="number"
+              step="0.01"
+              min="0"
+              class="form-input"
+              required
+            />
+          </div>
+          
+          <div v-if="costError" class="error-message">
+            {{ costError }}
+          </div>
+          
+          <div class="modal-actions">
+            <button type="button" @click="closeCostModal" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" :disabled="savingCost">
+              {{ savingCost ? 'Saving...' : 'Save' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -113,6 +190,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useItemStore } from '@/stores/item'
 import NavBar from '@/components/NavBar.vue'
+import api from '@/services/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -120,6 +198,16 @@ const itemStore = useItemStore()
 
 const item = ref(null)
 const loading = ref(true)
+const showAddCostModal = ref(false)
+const editingCost = ref(null)
+const costForm = ref({
+  date: new Date().toISOString().split('T')[0],
+  description: '',
+  type: '',
+  amount: ''
+})
+const costError = ref('')
+const savingCost = ref(false)
 
 const totalAdditionalCosts = computed(() => {
   if (!item.value?.additionalCosts?.length) return 0
@@ -132,6 +220,69 @@ const profit = computed(() => {
   const purchase = parseFloat(item.value.purchasePrice || 0)
   return sale - purchase - totalAdditionalCosts.value
 })
+
+const editCost = (cost) => {
+  editingCost.value = cost
+  costForm.value = {
+    date: cost.date ? new Date(cost.date).toISOString().split('T')[0] : '',
+    description: cost.description,
+    type: cost.type || '',
+    amount: cost.amount
+  }
+}
+
+const closeCostModal = () => {
+  showAddCostModal.value = false
+  editingCost.value = null
+  costForm.value = {
+    date: new Date().toISOString().split('T')[0],
+    description: '',
+    type: '',
+    amount: ''
+  }
+  costError.value = ''
+}
+
+const saveCost = async () => {
+  costError.value = ''
+  savingCost.value = true
+  
+  try {
+    const data = {
+      itemId: item.value.id,
+      date: costForm.value.date,
+      description: costForm.value.description,
+      type: costForm.value.type || null,
+      amount: parseFloat(costForm.value.amount)
+    }
+    
+    if (editingCost.value) {
+      await api.put(`/costs/${editingCost.value.id}`, data)
+    } else {
+      await api.post('/costs', data)
+    }
+    
+    // Refresh item data
+    item.value = await itemStore.fetchItem(route.params.id)
+    closeCostModal()
+  } catch (error) {
+    costError.value = error.response?.data?.error || 'Failed to save cost'
+  } finally {
+    savingCost.value = false
+  }
+}
+
+const deleteCost = async (costId) => {
+  if (!confirm('Are you sure you want to delete this cost?')) return
+  
+  try {
+    await api.delete(`/costs/${costId}`)
+    // Refresh item data
+    item.value = await itemStore.fetchItem(route.params.id)
+  } catch (error) {
+    alert(error.response?.data?.error || 'Failed to delete cost')
+  }
+}
 
 const handleDelete = async () => {
   if (confirm('Are you sure you want to delete this item?')) {
@@ -385,5 +536,76 @@ dd {
 .empty-message {
   color: var(--text-secondary);
   font-style: italic;
+}
+
+.costs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 1rem;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.btn-icon:hover {
+  opacity: 1;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-content h3 {
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  justify-content: flex-end;
+}
+
+.error-message {
+  padding: 0.75rem;
+  background-color: #FEE2E2;
+  color: #DC2626;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  margin-top: 1rem;
 }
 </style>

@@ -68,7 +68,7 @@ const soldCount = computed(() => {
 const totalInvestment = computed(() => {
   if (!Array.isArray(stats.value)) return 0
   const owned = stats.value.find(s => s.status === 'owned')
-  return parseFloat(owned?.totalPurchasePrice || 0)
+  return parseFloat(owned?.totalInvestment || 0)
 })
 
 const totalRevenue = computed(() => {
@@ -80,7 +80,7 @@ const totalRevenue = computed(() => {
 const profit = computed(() => {
   if (!Array.isArray(stats.value)) return 0
   const sold = stats.value.find(s => s.status === 'sold')
-  const soldInvestment = parseFloat(sold?.totalPurchasePrice || 0)
+  const soldInvestment = parseFloat(sold?.totalInvestment || 0)
   return totalRevenue.value - soldInvestment
 })
 

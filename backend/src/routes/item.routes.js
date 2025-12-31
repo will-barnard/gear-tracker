@@ -186,20 +186,33 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       raw: true
     });
     
-    // Calculate total additional costs
+    // Calculate total additional costs per status
     const additionalCostsQuery = await sequelize.query(`
-      SELECT SUM(ac.amount) as total_additional_costs
+      SELECT i.status, SUM(ac.amount) as total_additional_costs
       FROM additional_costs ac
       INNER JOIN items i ON ac.item_id = i.id
       WHERE i.user_id = :userId
+      GROUP BY i.status
     `, {
       replacements: { userId: req.user.id },
       type: sequelize.QueryTypes.SELECT
     });
     
+    // Map additional costs to status
+    const costsByStatus = {};
+    additionalCostsQuery.forEach(row => {
+      costsByStatus[row.status] = parseFloat(row.total_additional_costs) || 0;
+    });
+    
+    // Add additional costs to stats
+    const enrichedStats = stats.map(stat => ({
+      ...stat,
+      totalAdditionalCosts: costsByStatus[stat.status] || 0,
+      totalInvestment: (parseFloat(stat.totalPurchasePrice) || 0) + (costsByStatus[stat.status] || 0)
+    }));
+    
     res.json({
-      stats,
-      totalAdditionalCosts: additionalCostsQuery[0]?.total_additional_costs || 0
+      stats: enrichedStats
     });
   } catch (error) {
     next(error);
