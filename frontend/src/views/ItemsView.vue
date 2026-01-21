@@ -70,8 +70,7 @@
                 {{ item.category.name }}
               </span>
             </p>
-            <p v-if="item.purchasePrice"><strong>Purchase:</strong> ${{ parseFloat(item.purchasePrice).toFixed(2) }}</p>
-            <p><strong>Add. Costs:</strong> ${{ calculateAdditionalCosts(item).toFixed(2) }}</p>
+            <p v-if="calculateTotalCost(item) > 0"><strong>Total Cost:</strong> ${{ calculateTotalCost(item).toFixed(2) }}</p>
             <p v-if="item.salePrice"><strong>Sale:</strong> ${{ parseFloat(item.salePrice).toFixed(2) }}</p>
           </div>
           
@@ -168,6 +167,12 @@ const categories = ref([])
 const calculateAdditionalCosts = (item) => {
   if (!item.additionalCosts?.length) return 0
   return item.additionalCosts.reduce((sum, cost) => sum + parseFloat(cost.amount || 0), 0)
+}
+
+const calculateTotalCost = (item) => {
+  const purchase = parseFloat(item.purchasePrice || 0)
+  const additional = calculateAdditionalCosts(item)
+  return purchase + additional
 }
 
 const applyFilters = () => {
