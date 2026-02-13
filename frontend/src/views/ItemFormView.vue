@@ -84,8 +84,11 @@
           </div>
         </div>
         
-        <div class="form-section">
+        <div class="form-section" v-if="!selectedBundle || selectedBundle.type !== 'buy'">
           <h3>Purchase Details</h3>
+          <p v-if="selectedBundle && selectedBundle.type === 'buy'" class="info-message">
+            Purchase details are managed by the bundle.
+          </p>
           
           <div class="form-row">
             <div class="form-group">
@@ -118,8 +121,11 @@
           </div>
         </div>
         
-        <div class="form-section" v-if="formData.status === 'sold'">
+        <div class="form-section" v-if="formData.status === 'sold' && (!selectedBundle || selectedBundle.type !== 'sell')">
           <h3>Sale Details</h3>
+          <p v-if="selectedBundle && selectedBundle.type === 'sell'" class="info-message">
+            Sale details are managed by the bundle.
+          </p>
           
           <div class="form-row">
             <div class="form-group">
@@ -239,6 +245,11 @@ const categories = ref([])
 const bundles = ref([])
 const error = ref('')
 const loading = ref(false)
+
+const selectedBundle = computed(() => {
+  if (!formData.value.bundleId) return null
+  return bundles.value.find(b => b.id === formData.value.bundleId)
+})
 
 const handleSubmit = async () => {
   error.value = ''
@@ -380,6 +391,15 @@ onMounted(async () => {
   color: #DC2626;
   border-radius: 0.375rem;
   font-size: 0.875rem;
+}
+
+.info-message {
+  padding: 0.75rem;
+  background-color: #DBEAFE;
+  color: #1E40AF;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
 }
 
 textarea.form-input {
