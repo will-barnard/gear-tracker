@@ -18,15 +18,24 @@
         <div v-for="bundle in bundles" :key="bundle.id" class="bundle-card card">
           <div class="bundle-header">
             <h3>{{ bundle.name }}</h3>
-            <span class="status-badge" :class="bundle.status">{{ bundle.status }}</span>
+            <div class="badges">
+              <span class="type-badge" :class="bundle.type">{{ bundle.type === 'buy' ? 'Buy' : 'Sell' }}</span>
+              <span class="status-badge" :class="bundle.status">{{ bundle.status }}</span>
+            </div>
           </div>
           
           <div class="bundle-details">
-            <p v-if="bundle.purchasePrice">
+            <p v-if="bundle.type === 'buy' && bundle.purchasePrice">
               <strong>Purchase Price:</strong> ${{ parseFloat(bundle.purchasePrice).toFixed(2) }}
             </p>
-            <p v-if="bundle.purchaseDate">
+            <p v-if="bundle.type === 'buy' && bundle.purchaseDate">
               <strong>Purchase Date:</strong> {{ new Date(bundle.purchaseDate).toLocaleDateString() }}
+            </p>
+            <p v-if="bundle.type === 'sell' && bundle.salePrice">
+              <strong>Sale Price:</strong> ${{ parseFloat(bundle.salePrice).toFixed(2) }}
+            </p>
+            <p v-if="bundle.type === 'sell' && bundle.saleDate">
+              <strong>Sale Date:</strong> {{ new Date(bundle.saleDate).toLocaleDateString() }}
             </p>
             <p>
               <strong>Items:</strong> {{ bundle.items?.length || 0 }}
@@ -140,6 +149,31 @@ onMounted(async () => {
   margin: 0;
   font-size: 1.125rem;
   word-break: break-word;
+}
+
+.badges {
+  display: flex;
+  gap: 0.25rem;
+  flex-direction: column;
+}
+
+.type-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.type-badge.buy {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.type-badge.sell {
+  background: #E0E7FF;
+  color: #3730A3;
 }
 
 .status-badge {

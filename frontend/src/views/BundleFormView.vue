@@ -13,6 +13,14 @@
           <h3>Basic Information</h3>
           
           <div class="form-group">
+            <label class="form-label">Bundle Type *</label>
+            <select v-model="formData.type" class="form-input" required>
+              <option value="buy">Buy Bundle (purchased items to sell individually)</option>
+              <option value="sell">Sell Bundle (selling multiple items together)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
             <label class="form-label">Name *</label>
             <input
               v-model="formData.name"
@@ -40,7 +48,7 @@
           </div>
         </div>
         
-        <div class="form-section">
+        <div class="form-section" v-if="formData.type === 'buy'">
           <h3>Purchase Details</h3>
           
           <div class="form-row">
@@ -68,6 +76,40 @@
             <label class="form-label">Purchase Location</label>
             <input
               v-model="formData.purchaseLocation"
+              type="text"
+              class="form-input"
+            />
+          </div>
+        </div>
+        
+        <div class="form-section" v-if="formData.type === 'sell'">
+          <h3>Sale Details</h3>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Sale Price</label>
+              <input
+                v-model="formData.salePrice"
+                type="number"
+                step="0.01"
+                class="form-input"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Sale Date</label>
+              <input
+                v-model="formData.saleDate"
+                type="date"
+                class="form-input"
+              />
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Sale Location</label>
+            <input
+              v-model="formData.saleLocation"
               type="text"
               class="form-input"
             />
@@ -114,12 +156,16 @@ const bundleStore = useBundleStore()
 const isEdit = computed(() => route.name === 'EditBundle')
 
 const formData = ref({
+  type: 'buy',
   name: '',
   description: '',
   status: 'active',
   purchasePrice: '',
   purchaseDate: '',
   purchaseLocation: '',
+  salePrice: '',
+  saleDate: '',
+  saleLocation: '',
   notes: ''
 })
 
@@ -159,9 +205,12 @@ onMounted(async () => {
         formData.value[key] = bundle[key]
       }
     })
-    // Format date
+    // Format dates
     if (bundle.purchaseDate) {
       formData.value.purchaseDate = bundle.purchaseDate.split('T')[0]
+    }
+    if (bundle.saleDate) {
+      formData.value.saleDate = bundle.saleDate.split('T')[0]
     }
   }
 })

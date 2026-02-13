@@ -18,6 +18,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false
     },
+    type: {
+      type: DataTypes.ENUM('buy', 'sell'),
+      allowNull: false,
+      defaultValue: 'buy'
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -31,6 +36,18 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     purchaseLocation: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    salePrice: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    saleDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    saleLocation: {
       type: DataTypes.STRING,
       allowNull: true
     },

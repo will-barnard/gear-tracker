@@ -159,18 +159,32 @@ router.get('/:id/stats', authMiddleware, async (req, res, next) => {
     const ownedItems = bundle.items.filter(item => item.status === 'owned').length;
     const soldItems = bundle.items.filter(item => item.status === 'sold').length;
     
-    const totalRevenue = bundle.items
-      .filter(item => item.status === 'sold')
-      .reduce((sum, item) => sum + parseFloat(item.salePrice || 0), 0);
-    
-    const costPerItem = totalItems > 0 ? parseFloat(bundle.purchasePrice || 0) / totalItems : 0;
-    
     const totalAdditionalCosts = bundle.items.reduce((sum, item) => {
       const itemCosts = item.additionalCosts?.reduce((s, c) => s + parseFloat(c.amount || 0), 0) || 0;
       return sum + itemCosts;
     }, 0);
     
-    const totalProfit = totalRevenue - (costPerItem * soldItems) - totalAdditionalCosts;
+    let costPerItem = 0;
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let totalProfit = 0;
+    
+    if (bundle.type === 'buy') {
+      // Buy bundle: distribute purchase cost across items
+      costPerItem = totalItems > 0 ? parseFloat(bundle.purchasePrice || 0) / totalItems : 0;
+      totalRevenue = bundle.items
+        .filter(item => item.status === 'sold')
+        .reduce((sum, item) => sum + parseFloat(item.salePrice || 0), 0);
+      totalCost = costPerItem * soldItems + totalAdditionalCosts;
+      totalProfit = totalRevenue - totalCost;
+    } else {
+      // Sell bundle: sum item costs, bundle sale price is revenue
+      totalCost = bundle.items.reduce((sum, item) => 
+        sum + parseFloat(item.purchasePrice || 0), 0) + totalAdditionalCosts;
+      totalRevenue = parseFloat(bundle.salePrice || 0);
+      totalProfit = totalRevenue - totalCost;
+      costPerItem = totalItems > 0 ? totalCost / totalItems : 0;
+    }
     
     res.json({
       totalItems,
@@ -178,9 +192,11 @@ router.get('/:id/stats', authMiddleware, async (req, res, next) => {
       soldItems,
       totalRevenue,
       costPerItem,
+      totalCost,
       totalAdditionalCosts,
       totalProfit,
-      isComplete: ownedItems === 0 && totalItems > 0
+      bundleType: bundle.type,
+      isComplete: bundle.type === 'buy' ? (ownedItems === 0 && totalItems > 0) : (bundle.status === 'complete')
     });
   } catch (error) {
     next(error);

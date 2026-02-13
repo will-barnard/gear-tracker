@@ -9,7 +9,10 @@
         <div class="detail-header">
           <div>
             <h2>{{ bundle.name }}</h2>
-            <span class="status-badge" :class="bundle.status">{{ bundle.status }}</span>
+            <div class="badges">
+              <span class="type-badge" :class="bundle.type">{{ bundle.type === 'buy' ? 'Buy Bundle' : 'Sell Bundle' }}</span>
+              <span class="status-badge" :class="bundle.status">{{ bundle.status }}</span>
+            </div>
           </div>
           <div class="header-actions">
             <router-link :to="`/bundles/${bundle.id}/edit`" class="btn btn-primary">Edit</router-link>
@@ -18,7 +21,7 @@
         </div>
         
         <div class="detail-grid">
-          <div class="detail-card card">
+          <div class="detail-card card" v-if="bundle.type === 'buy'">
             <h3>Purchase Information</h3>
             <dl>
               <dt>Purchase Price</dt>
@@ -29,6 +32,20 @@
               
               <dt>Purchase Location</dt>
               <dd>{{ bundle.purchaseLocation || 'Not set' }}</dd>
+            </dl>
+          </div>
+          
+          <div class="detail-card card" v-if="bundle.type === 'sell'">
+            <h3>Sale Information</h3>
+            <dl>
+              <dt>Sale Price</dt>
+              <dd>${{ bundle.salePrice ? parseFloat(bundle.salePrice).toFixed(2) : '0.00' }}</dd>
+              
+              <dt>Sale Date</dt>
+              <dd>{{ bundle.saleDate ? new Date(bundle.saleDate).toLocaleDateString() : 'Not set' }}</dd>
+              
+              <dt>Sale Location</dt>
+              <dd>{{ bundle.saleLocation || 'Not set' }}</dd>
             </dl>
           </div>
           
@@ -44,11 +61,21 @@
               <dt>Sold</dt>
               <dd>{{ stats.soldItems }}</dd>
               
-              <dt>Cost Per Item</dt>
-              <dd>${{ stats.costPerItem.toFixed(2) }}</dd>
+              <template v-if="bundle.type === 'buy'">
+                <dt>Cost Per Item</dt>
+                <dd>${{ stats.costPerItem.toFixed(2) }}</dd>
+                
+                <dt>Total Revenue</dt>
+                <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
+              </template>
               
-              <dt>Total Revenue</dt>
-              <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
+              <template v-if="bundle.type === 'sell'">
+                <dt>Total Item Cost</dt>
+                <dd>${{ stats.totalCost.toFixed(2) }}</dd>
+                
+                <dt>Bundle Sale Price</dt>
+                <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
+              </template>
               
               <dt>Total Profit</dt>
               <dd :class="stats.totalProfit >= 0 ? 'profit' : 'loss'">
@@ -86,7 +113,12 @@
                     Sale: ${{ parseFloat(item.salePrice).toFixed(2) }}
                   </span>
                   <span v-if="stats" class="cost-share">
-                    Cost: ${{ stats.costPerItem.toFixed(2) }}
+                    <template v-if="bundle.type === 'buy'">
+                      Cost: ${{ stats.costPerItem.toFixed(2) }}
+                    </template>
+                    <template v-else-if="item.purchasePrice">
+                      Cost: ${{ parseFloat(item.purchasePrice).toFixed(2) }}
+                    </template>
                   </span>
                 </div>
               </div>
@@ -176,6 +208,31 @@ onMounted(async () => {
   margin-bottom: 0.5rem;
   font-size: 1.5rem;
   word-break: break-word;
+}
+
+.badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.type-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.type-badge.buy {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.type-badge.sell {
+  background: #E0E7FF;
+  color: #3730A3;
 }
 
 @media (min-width: 769px) {
