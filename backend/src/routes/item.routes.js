@@ -88,11 +88,13 @@ router.get('/', authMiddleware, async (req, res, next) => {
 // Get single item
 router.get('/:id', authMiddleware, async (req, res, next) => {
   try {
+    const { Bundle } = require('../models');
     const item = await Item.findOne({
       where: { id: req.params.id, userId: req.user.id },
       include: [
         { model: Category, as: 'category' },
-        { model: AdditionalCost, as: 'additionalCosts' }
+        { model: AdditionalCost, as: 'additionalCosts' },
+        { model: Bundle, as: 'bundle' }
       ]
     });
     
@@ -172,44 +174,74 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
 // Get inventory summary
 router.get('/stats/summary', authMiddleware, async (req, res, next) => {
   try {
-    const { sequelize } = require('../models');
+    const { sequelize, Bundle } = require('../models');
     
-    const stats = await Item.findAll({
+    // Get all items with their bundles
+    const items = await Item.findAll({
       where: { userId: req.user.id },
-      attributes: [
-        'status',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-        [sequelize.fn('SUM', sequelize.col('purchase_price')), 'totalPurchasePrice'],
-        [sequelize.fn('SUM', sequelize.col('sale_price')), 'totalSalePrice']
-      ],
-      group: ['status'],
-      raw: true
+      include: [
+        { model: Bundle, as: 'bundle' },
+        { model: AdditionalCost, as: 'additionalCosts' }
+      ]
     });
     
-    // Calculate total additional costs per status
-    const additionalCostsQuery = await sequelize.query(`
-      SELECT i.status, SUM(ac.amount) as total_additional_costs
-      FROM additional_costs ac
-      INNER JOIN items i ON ac.item_id = i.id
-      WHERE i.user_id = :userId
-      GROUP BY i.status
+    // Calculate stats manually to account for bundles
+    const statsByStatus = {
+      owned: { count: 0, totalInvestment: 0, totalSalePrice: 0 },
+      sold: { count: 0, totalInvestment: 0, totalSalePrice: 0 }
+    };
+    
+    // Get bundle item counts for cost allocation
+    const bundleItemCounts = {};
+    const bundleItems = await sequelize.query(`
+      SELECT bundle_id, COUNT(*) as item_count
+      FROM items
+      WHERE bundle_id IS NOT NULL AND user_id = :userId
+      GROUP BY bundle_id
     `, {
       replacements: { userId: req.user.id },
       type: sequelize.QueryTypes.SELECT
     });
     
-    // Map additional costs to status
-    const costsByStatus = {};
-    additionalCostsQuery.forEach(row => {
-      costsByStatus[row.status] = parseFloat(row.total_additional_costs) || 0;
+    bundleItems.forEach(row => {
+      bundleItemCounts[row.bundle_id] = parseInt(row.item_count);
     });
     
-    // Add additional costs to stats
-    const enrichedStats = stats.map(stat => ({
-      ...stat,
-      totalAdditionalCosts: costsByStatus[stat.status] || 0,
-      totalInvestment: (parseFloat(stat.totalPurchasePrice) || 0) + (costsByStatus[stat.status] || 0)
-    }));
+    items.forEach(item => {
+      const status = item.status;
+      statsByStatus[status].count++;
+      
+      // Calculate item cost (from bundle or individual purchase)
+      let itemCost = 0;
+      if (item.bundleId && item.bundle) {
+        const bundlePrice = parseFloat(item.bundle.purchasePrice || 0);
+        const itemCount = bundleItemCounts[item.bundleId] || 1;
+        itemCost = bundlePrice / itemCount;
+      } else {
+        itemCost = parseFloat(item.purchasePrice || 0);
+      }
+      
+      // Add additional costs
+      const additionalCosts = item.additionalCosts?.reduce((sum, cost) => 
+        sum + parseFloat(cost.amount || 0), 0) || 0;
+      
+      statsByStatus[status].totalInvestment += itemCost + additionalCosts;
+      statsByStatus[status].totalSalePrice += parseFloat(item.salePrice || 0);
+    });
+    
+    // Format stats array
+    const enrichedStats = Object.entries(statsByStatus)
+      .filter(([_, data]) => data.count > 0)
+      .map(([status, data]) => ({
+        status,
+        count: data.count,
+        totalPurchasePrice: data.totalInvestment - (data.totalAdditionalCosts || 0),
+        totalSalePrice: data.totalSalePrice,
+        totalAdditionalCosts: items
+          .filter(i => i.status === status)
+          .reduce((sum, item) => sum + (item.additionalCosts?.reduce((s, c) => s + parseFloat(c.amount || 0), 0) || 0), 0),
+        totalInvestment: data.totalInvestment
+      }));
     
     res.json({
       stats: enrichedStats

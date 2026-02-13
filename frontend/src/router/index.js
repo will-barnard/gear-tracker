@@ -51,6 +51,30 @@ const router = createRouter({
       name: 'Categories',
       component: () => import('@/views/CategoriesView.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/bundles',
+      name: 'Bundles',
+      component: () => import('@/views/BundlesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/bundles/new',
+      name: 'NewBundle',
+      component: () => import('@/views/BundleFormView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/bundles/:id',
+      name: 'BundleDetail',
+      component: () => import('@/views/BundleDetailView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/bundles/:id/edit',
+      name: 'EditBundle',
+      component: () => import('@/views/BundleFormView.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })

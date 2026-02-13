@@ -28,6 +28,7 @@ db.User = require('./user.model')(sequelize, Sequelize);
 db.Item = require('./item.model')(sequelize, Sequelize);
 db.Category = require('./category.model')(sequelize, Sequelize);
 db.AdditionalCost = require('./additional-cost.model')(sequelize, Sequelize);
+db.Bundle = require('./bundle.model')(sequelize, Sequelize);
 
 // Define associations
 db.User.hasMany(db.Item, { foreignKey: 'userId', as: 'items' });
@@ -36,10 +37,16 @@ db.Item.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
 db.Category.hasMany(db.Item, { foreignKey: 'categoryId', as: 'items' });
 db.Item.belongsTo(db.Category, { foreignKey: 'categoryId', as: 'category' });
 
+db.Bundle.hasMany(db.Item, { foreignKey: 'bundleId', as: 'items' });
+db.Item.belongsTo(db.Bundle, { foreignKey: 'bundleId', as: 'bundle' });
+
 db.Item.hasMany(db.AdditionalCost, { foreignKey: 'itemId', as: 'additionalCosts' });
 db.AdditionalCost.belongsTo(db.Item, { foreignKey: 'itemId', as: 'item' });
 
 db.User.hasMany(db.Category, { foreignKey: 'userId', as: 'categories' });
 db.Category.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
+
+db.User.hasMany(db.Bundle, { foreignKey: 'userId', as: 'bundles' });
+db.Bundle.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
 
 module.exports = db;

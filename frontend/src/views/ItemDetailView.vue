@@ -27,6 +27,13 @@
               <dd>{{ item.model || '-' }}</dd>
               <dt>Category</dt>
               <dd>{{ item.category?.name || '-' }}</dd>
+              <dt>Bundle</dt>
+              <dd>
+                <router-link v-if="item.bundle" :to="`/bundles/${item.bundle.id}`" class="bundle-link">
+                  {{ item.bundle.name }}
+                </router-link>
+                <span v-else>-</span>
+              </dd>
               <dt>Serial Number</dt>
               <dd>{{ item.serialNumber || '-' }}</dd>
               <dt>Condition</dt>
@@ -37,12 +44,17 @@
           <div class="detail-card card">
             <h3>Purchase Details</h3>
             <dl>
-              <dt>Purchase Price</dt>
-              <dd>{{ item.purchasePrice ? `$${parseFloat(item.purchasePrice).toFixed(2)}` : '-' }}</dd>
+              <dt v-if="item.bundleId">Cost Share (from bundle)</dt>
+              <dt v-else>Purchase Price</dt>
+              <dd v-if="item.bundleId && bundleStats">
+                ${{ bundleStats.costPerItem.toFixed(2) }}
+                <span class="help-text">({{ item.bundle.name }})</span>
+              </dd>
+              <dd v-else>{{ item.purchasePrice ? `$${parseFloat(item.purchasePrice).toFixed(2)}` : '-' }}</dd>
               <dt>Purchase Date</dt>
-              <dd>{{ item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString() : '-' }}</dd>
+              <dd>{{ item.purchaseDate || item.bundle?.purchaseDate ? new Date(item.purchaseDate || item.bundle.purchaseDate).toLocaleDateString() : '-' }}</dd>
               <dt>Purchase Location</dt>
-              <dd>{{ item.purchaseLocation || '-' }}</dd>
+              <dd>{{ item.purchaseLocation || item.bundle?.purchaseLocation || '-' }}</dd>
             </dl>
           </div>
           
@@ -189,14 +201,17 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useItemStore } from '@/stores/item'
+import { useBundleStore } from '@/stores/bundle'
 import NavBar from '@/components/NavBar.vue'
 import api from '@/services/api'
 
 const router = useRouter()
 const route = useRoute()
 const itemStore = useItemStore()
+const bundleStore = useBundleStore()
 
 const item = ref(null)
+const bundleStats = ref(null)
 const loading = ref(true)
 const showAddCostModal = ref(false)
 const editingCost = ref(null)
@@ -214,11 +229,17 @@ const totalAdditionalCosts = computed(() => {
   return item.value.additionalCosts.reduce((sum, cost) => sum + parseFloat(cost.amount), 0)
 })
 
+const itemCost = computed(() => {
+  if (item.value?.bundleId && bundleStats.value) {
+    return bundleStats.value.costPerItem
+  }
+  return parseFloat(item.value?.purchasePrice || 0)
+})
+
 const profit = computed(() => {
   if (!item.value || item.value.status !== 'sold') return 0
   const sale = parseFloat(item.value.salePrice || 0)
-  const purchase = parseFloat(item.value.purchasePrice || 0)
-  return sale - purchase - totalAdditionalCosts.value
+  return sale - itemCost.value - totalAdditionalCosts.value
 })
 
 const editCost = (cost) => {
@@ -294,6 +315,9 @@ const handleDelete = async () => {
 onMounted(async () => {
   try {
     item.value = await itemStore.fetchItem(route.params.id)
+    if (item.value.bundleId) {
+      bundleStats.value = await bundleStore.getBundleStats(item.value.bundleId)
+    }
   } finally {
     loading.value = false
   }
@@ -429,6 +453,21 @@ dt {
 
 dd {
   color: var(--text-primary);
+}
+
+.bundle-link {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.bundle-link:hover {
+  text-decoration: underline;
+}
+
+.help-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: block;
 }
 
 .profit {

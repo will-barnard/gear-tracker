@@ -21,6 +21,14 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    bundleId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'bundles',
+        key: 'id'
+      }
+    },
     name: {
       type: DataTypes.STRING,
       allowNull: false

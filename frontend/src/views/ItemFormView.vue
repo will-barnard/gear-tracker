@@ -54,6 +54,18 @@
             </div>
             
             <div class="form-group">
+              <label class="form-label">Bundle</label>
+              <select v-model="formData.bundleId" class="form-input">
+                <option value="">No bundle (individual purchase)</option>
+                <option v-for="bundle in bundles" :key="bundle.id" :value="bundle.id">
+                  {{ bundle.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
               <label class="form-label">Status</label>
               <select v-model="formData.status" class="form-input">
                 <option value="owned">Owned</option>
@@ -193,12 +205,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useItemStore } from '@/stores/item'
 import { useCategoryStore } from '@/stores/category'
+import { useBundleStore } from '@/stores/bundle'
 import NavBar from '@/components/NavBar.vue'
 
 const router = useRouter()
 const route = useRoute()
 const itemStore = useItemStore()
 const categoryStore = useCategoryStore()
+const bundleStore = useBundleStore()
 
 const isEdit = computed(() => route.name === 'EditItem')
 
@@ -207,6 +221,7 @@ const formData = ref({
   brand: '',
   model: '',
   categoryId: '',
+  bundleId: '',
   status: 'owned',
   description: '',
   purchasePrice: '',
@@ -221,6 +236,7 @@ const formData = ref({
 })
 
 const categories = ref([])
+const bundles = ref([])
 const error = ref('')
 const loading = ref(false)
 
@@ -252,6 +268,9 @@ const handleSubmit = async () => {
 onMounted(async () => {
   await categoryStore.fetchCategories()
   categories.value = categoryStore.categories
+  
+  await bundleStore.fetchBundles()
+  bundles.value = bundleStore.bundles.filter(b => b.status === 'active')
   
   if (isEdit.value) {
     const item = await itemStore.fetchItem(route.params.id)
