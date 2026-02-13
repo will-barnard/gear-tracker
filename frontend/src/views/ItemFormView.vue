@@ -54,18 +54,6 @@
             </div>
             
             <div class="form-group">
-              <label class="form-label">Bundle</label>
-              <select v-model="formData.bundleId" class="form-input">
-                <option value="">No bundle (individual purchase)</option>
-                <option v-for="bundle in bundles" :key="bundle.id" :value="bundle.id">
-                  {{ bundle.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="form-row">
-            <div class="form-group">
               <label class="form-label">Status</label>
               <select v-model="formData.status" class="form-input">
                 <option value="owned">Owned</option>
@@ -84,78 +72,104 @@
           </div>
         </div>
         
-        <div class="form-section" v-if="!selectedBundle || selectedBundle.type !== 'buy'">
+        <div class="form-section">
           <h3>Purchase Details</h3>
-          <p v-if="selectedBundle && selectedBundle.type === 'buy'" class="info-message">
-            Purchase details are managed by the bundle.
-          </p>
           
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Purchase Price</label>
-              <input
-                v-model="formData.purchasePrice"
-                type="number"
-                step="0.01"
-                class="form-input"
-              />
+          <div class="form-group">
+            <label class="form-label">Purchase Bundle</label>
+            <select v-model="formData.purchaseBundleId" class="form-input">
+              <option value="">No bundle (individual purchase)</option>
+              <option v-for="bundle in buyBundles" :key="bundle.id" :value="bundle.id">
+                {{ bundle.name }}
+              </option>
+            </select>
+          </div>
+          
+          <div v-if="!purchaseBundle">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Purchase Price</label>
+                <input
+                  v-model="formData.purchasePrice"
+                  type="number"
+                  step="0.01"
+                  class="form-input"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">Purchase Date</label>
+                <input
+                  v-model="formData.purchaseDate"
+                  type="date"
+                  class="form-input"
+                />
+              </div>
             </div>
             
             <div class="form-group">
-              <label class="form-label">Purchase Date</label>
+              <label class="form-label">Purchase Location</label>
               <input
-                v-model="formData.purchaseDate"
-                type="date"
+                v-model="formData.purchaseLocation"
+                type="text"
                 class="form-input"
               />
             </div>
           </div>
           
-          <div class="form-group">
-            <label class="form-label">Purchase Location</label>
-            <input
-              v-model="formData.purchaseLocation"
-              type="text"
-              class="form-input"
-            />
-          </div>
+          <p v-else class="info-message">
+            Purchase details are managed by the "{{ purchaseBundle.name }}" bundle.
+          </p>
         </div>
         
-        <div class="form-section" v-if="formData.status === 'sold' && (!selectedBundle || selectedBundle.type !== 'sell')">
+        <div class="form-section" v-if="formData.status === 'sold'">
           <h3>Sale Details</h3>
-          <p v-if="selectedBundle && selectedBundle.type === 'sell'" class="info-message">
-            Sale details are managed by the bundle.
-          </p>
           
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Sale Price</label>
-              <input
-                v-model="formData.salePrice"
-                type="number"
-                step="0.01"
-                class="form-input"
-              />
+          <div class="form-group">
+            <label class="form-label">Sale Bundle</label>
+            <select v-model="formData.saleBundleId" class="form-input">
+              <option value="">No bundle (individual sale)</option>
+              <option v-for="bundle in sellBundles" :key="bundle.id" :value="bundle.id">
+                {{ bundle.name }}
+              </option>
+            </select>
+          </div>
+          
+          <div v-if="!saleBundle">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Sale Price</label>
+                <input
+                  v-model="formData.salePrice"
+                  type="number"
+                  step="0.01"
+                  class="form-input"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">Sale Date</label>
+                <input
+                  v-model="formData.saleDate"
+                  type="date"
+                  class="form-input"
+                />
+              </div>
             </div>
             
             <div class="form-group">
-              <label class="form-label">Sale Date</label>
+              <label class="form-label">Sale Location</label>
               <input
-                v-model="formData.saleDate"
-                type="date"
+                v-model="formData.saleLocation"
+                type="text"
                 class="form-input"
               />
             </div>
           </div>
           
-          <div class="form-group">
-            <label class="form-label">Sale Location</label>
-            <input
-              v-model="formData.saleLocation"
-              type="text"
-              class="form-input"
-            />
-          </div>
+          <p v-else class="info-message">
+            Sale details are managed by the "{{ saleBundle.name }}" bundle.
+          </p>
         </div>
         
         <div class="form-section">
@@ -227,7 +241,8 @@ const formData = ref({
   brand: '',
   model: '',
   categoryId: '',
-  bundleId: '',
+  purchaseBundleId: '',
+  saleBundleId: '',
   status: 'owned',
   description: '',
   purchasePrice: '',
@@ -246,9 +261,17 @@ const bundles = ref([])
 const error = ref('')
 const loading = ref(false)
 
-const selectedBundle = computed(() => {
-  if (!formData.value.bundleId) return null
-  return bundles.value.find(b => b.id === formData.value.bundleId)
+const buyBundles = computed(() => bundles.value.filter(b => b.type === 'buy'))
+const sellBundles = computed(() => bundles.value.filter(b => b.type === 'sell'))
+
+const purchaseBundle = computed(() => {
+  if (!formData.value.purchaseBundleId) return null
+  return bundles.value.find(b => b.id === formData.value.purchaseBundleId)
+})
+
+const saleBundle = computed(() => {
+  if (!formData.value.saleBundleId) return null
+  return bundles.value.find(b => b.id === formData.value.saleBundleId)
 })
 
 const handleSubmit = async () => {

@@ -27,12 +27,16 @@
               <dd>{{ item.model || '-' }}</dd>
               <dt>Category</dt>
               <dd>{{ item.category?.name || '-' }}</dd>
-              <dt>Bundle</dt>
-              <dd>
-                <router-link v-if="item.bundle" :to="`/bundles/${item.bundle.id}`" class="bundle-link">
-                  {{ item.bundle.name }}
-                </router-link>
-                <span v-else>-</span>
+              <dt v-if="item.purchaseBundle || item.saleBundle">Bundles</dt>
+              <dd v-if="item.purchaseBundle || item.saleBundle">
+                <div class="bundle-links">
+                  <router-link v-if="item.purchaseBundle" :to="`/bundles/${item.purchaseBundle.id}`" class="bundle-link">
+                    <span class="bundle-type">Buy:</span> {{ item.purchaseBundle.name }}
+                  </router-link>
+                  <router-link v-if="item.saleBundle" :to="`/bundles/${item.saleBundle.id}`" class="bundle-link">
+                    <span class="bundle-type">Sell:</span> {{ item.saleBundle.name }}
+                  </router-link>
+                </div>
               </dd>
               <dt>Serial Number</dt>
               <dd>{{ item.serialNumber || '-' }}</dd>
@@ -44,31 +48,36 @@
           <div class="detail-card card">
             <h3>Purchase Details</h3>
             <dl>
-              <dt v-if="item.bundleId">Cost Share (from bundle)</dt>
+              <dt v-if="item.purchaseBundleId">Cost Share (from bundle)</dt>
               <dt v-else>Purchase Price</dt>
-              <dd v-if="item.bundleId && bundleStats">
-                ${{ bundleStats.costPerItem.toFixed(2) }}
-                <span class="help-text">({{ item.bundle.name }})</span>
+              <dd v-if="item.purchaseBundleId && purchaseBundleStats">
+                ${{ purchaseBundleStats.costPerItem.toFixed(2) }}
+                <span class="help-text">({{ item.purchaseBundle.name }})</span>
               </dd>
               <dd v-else>{{ item.purchasePrice ? `$${parseFloat(item.purchasePrice).toFixed(2)}` : '-' }}</dd>
               <dt>Purchase Date</dt>
-              <dd>{{ item.purchaseDate || item.bundle?.purchaseDate ? new Date(item.purchaseDate || item.bundle.purchaseDate).toLocaleDateString() : '-' }}</dd>
+              <dd>{{ item.purchaseDate || item.purchaseBundle?.purchaseDate ? new Date(item.purchaseDate || item.purchaseBundle.purchaseDate).toLocaleDateString() : '-' }}</dd>
               <dt>Purchase Location</dt>
-              <dd>{{ item.purchaseLocation || item.bundle?.purchaseLocation || '-' }}</dd>
+              <dd>{{ item.purchaseLocation || item.purchaseBundle?.purchaseLocation || '-' }}</dd>
             </dl>
           </div>
           
           <div v-if="item.status === 'sold'" class="detail-card card">
             <h3>Sale Details</h3>
             <dl>
-              <dt>Sale Price</dt>
-              <dd>{{ item.salePrice ? `$${parseFloat(item.salePrice).toFixed(2)}` : '-' }}</dd>
+              <dt v-if="item.saleBundleId">Sale Bundle Price</dt>
+              <dt v-else>Sale Price</dt>
+              <dd v-if="item.saleBundleId && item.saleBundle">
+                ${{ parseFloat(item.saleBundle.salePrice || 0).toFixed(2) }}
+                <span class="help-text">({{ item.saleBundle.name }})</span>
+              </dd>
+              <dd v-else>{{ item.salePrice ? `$${parseFloat(item.salePrice).toFixed(2)}` : '-' }}</dd>
               <dt>Sale Date</dt>
-              <dd>{{ item.saleDate ? new Date(item.saleDate).toLocaleDateString() : '-' }}</dd>
+              <dd>{{ item.saleDate || item.saleBundle?.saleDate ? new Date(item.saleDate || item.saleBundle.saleDate).toLocaleDateString() : '-' }}</dd>
               <dt>Sale Location</dt>
-              <dd>{{ item.saleLocation || '-' }}</dd>
-              <dt>Profit/Loss</dt>
-              <dd :class="profit >= 0 ? 'profit' : 'loss'">
+              <dd>{{ item.saleLocation || item.saleBundle?.saleLocation || '-' }}</dd>
+              <dt v-if="!item.saleBundleId">Profit/Loss</dt>
+              <dd v-if="!item.saleBundleId" :class="profit >= 0 ? 'profit' : 'loss'">
                 {{ profit >= 0 ? '+' : '' }}${{ profit.toFixed(2) }}
               </dd>
             </dl>
@@ -211,7 +220,7 @@ const itemStore = useItemStore()
 const bundleStore = useBundleStore()
 
 const item = ref(null)
-const bundleStats = ref(null)
+const purchaseBundleStats = ref(null)
 const loading = ref(true)
 const showAddCostModal = ref(false)
 const editingCost = ref(null)
@@ -230,8 +239,8 @@ const totalAdditionalCosts = computed(() => {
 })
 
 const itemCost = computed(() => {
-  if (item.value?.bundleId && bundleStats.value) {
-    return bundleStats.value.costPerItem
+  if (item.value?.purchaseBundleId && purchaseBundleStats.value) {
+    return purchaseBundleStats.value.costPerItem
   }
   return parseFloat(item.value?.purchasePrice || 0)
 })
@@ -315,8 +324,8 @@ const handleDelete = async () => {
 onMounted(async () => {
   try {
     item.value = await itemStore.fetchItem(route.params.id)
-    if (item.value.bundleId) {
-      bundleStats.value = await bundleStore.getBundleStats(item.value.bundleId)
+    if (item.value.purchaseBundleId) {
+      purchaseBundleStats.value = await bundleStore.getBundleStats(item.value.purchaseBundleId)
     }
   } finally {
     loading.value = false
@@ -455,13 +464,28 @@ dd {
   color: var(--text-primary);
 }
 
+.bundle-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .bundle-link {
   color: var(--primary-color);
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .bundle-link:hover {
   text-decoration: underline;
+}
+
+.bundle-type {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
 }
 
 .help-text {

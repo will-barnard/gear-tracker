@@ -21,7 +21,15 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
-    bundleId: {
+    purchaseBundleId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'bundles',
+        key: 'id'
+      }
+    },
+    saleBundleId: {
       type: DataTypes.UUID,
       allowNull: true,
       references: {

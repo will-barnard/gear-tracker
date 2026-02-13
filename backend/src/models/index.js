@@ -37,8 +37,11 @@ db.Item.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
 db.Category.hasMany(db.Item, { foreignKey: 'categoryId', as: 'items' });
 db.Item.belongsTo(db.Category, { foreignKey: 'categoryId', as: 'category' });
 
-db.Bundle.hasMany(db.Item, { foreignKey: 'bundleId', as: 'items' });
-db.Item.belongsTo(db.Bundle, { foreignKey: 'bundleId', as: 'bundle' });
+db.Bundle.hasMany(db.Item, { foreignKey: 'purchaseBundleId', as: 'purchasedItems' });
+db.Item.belongsTo(db.Bundle, { foreignKey: 'purchaseBundleId', as: 'purchaseBundle' });
+
+db.Bundle.hasMany(db.Item, { foreignKey: 'saleBundleId', as: 'soldItems' });
+db.Item.belongsTo(db.Bundle, { foreignKey: 'saleBundleId', as: 'saleBundle' });
 
 db.Item.hasMany(db.AdditionalCost, { foreignKey: 'itemId', as: 'additionalCosts' });
 db.AdditionalCost.belongsTo(db.Item, { foreignKey: 'itemId', as: 'item' });

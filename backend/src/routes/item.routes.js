@@ -94,7 +94,8 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       include: [
         { model: Category, as: 'category' },
         { model: AdditionalCost, as: 'additionalCosts' },
-        { model: Bundle, as: 'bundle' }
+        { model: Bundle, as: 'purchaseBundle' },
+        { model: Bundle, as: 'saleBundle' }
       ]
     });
     
@@ -180,7 +181,8 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
     const items = await Item.findAll({
       where: { userId: req.user.id },
       include: [
-        { model: Bundle, as: 'bundle' },
+        { model: Bundle, as: 'purchaseBundle' },
+        { model: Bundle, as: 'saleBundle' },
         { model: AdditionalCost, as: 'additionalCosts' }
       ]
     });
@@ -205,8 +207,8 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
     const bundleItems = await sequelize.query(`
       SELECT b.id as bundle_id, b.type, COUNT(i.*) as item_count
       FROM bundles b
-      LEFT JOIN items i ON i.bundle_id = b.id
-      WHERE b.user_id = :userId
+      LEFT JOIN items i ON i.purchase_bundle_id = b.id
+      WHERE b.user_id = :userId AND b.type = 'buy'
       GROUP BY b.id, b.type
     `, {
       replacements: { userId: req.user.id },
@@ -226,15 +228,15 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       
       // Calculate item cost
       let itemCost = 0;
-      if (item.bundleId && item.bundle) {
-        const bundleInfo = bundleItemCounts[item.bundleId];
+      if (item.purchaseBundleId && item.purchaseBundle) {
+        const bundleInfo = bundleItemCounts[item.purchaseBundleId];
         if (bundleInfo && bundleInfo.type === 'buy') {
           // For buy bundles: allocate purchase cost across items
-          const bundlePrice = parseFloat(item.bundle.purchasePrice || 0);
+          const bundlePrice = parseFloat(item.purchaseBundle.purchasePrice || 0);
           const itemCount = bundleInfo.count || 1;
           itemCost = bundlePrice / itemCount;
         } else {
-          // For sell bundles: use individual item purchase price
+          // Fallback to individual purchase price
           itemCost = parseFloat(item.purchasePrice || 0);
         }
       } else {
@@ -250,7 +252,7 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       
       // For items in sell bundles, don't count individual sale prices
       // The bundle sale price will be counted separately
-      if (item.bundleId && item.bundle && item.bundle.type === 'sell') {
+      if (item.saleBundleId && item.saleBundle) {
         // Don't add individual item sale price for sell bundles
       } else {
         statsByStatus[status].totalSalePrice += parseFloat(item.salePrice || 0);
@@ -260,7 +262,7 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
     // Add sell bundle revenues to sold items
     sellBundles.forEach(bundle => {
       // Check if all items in the bundle are sold
-      const bundleItems = items.filter(item => item.bundleId === bundle.id);
+      const bundleItems = items.filter(item => item.saleBundleId === bundle.id);
       const allSold = bundleItems.length > 0 && bundleItems.every(item => item.status === 'sold');
       
       if (allSold) {
