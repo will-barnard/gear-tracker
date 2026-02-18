@@ -97,6 +97,7 @@
                     <th>Date</th>
                     <th>Description</th>
                     <th>Type</th>
+                    <th>Category</th>
                     <th>Amount</th>
                     <th>Actions</th>
                   </tr>
@@ -105,7 +106,12 @@
                   <tr v-for="cost in item.additionalCosts" :key="cost.id">
                     <td data-label="Date">{{ new Date(cost.date).toLocaleDateString() }}</td>
                     <td data-label="Description">{{ cost.description }}</td>
-                    <td data-label="Type">{{ cost.type || '-' }}</td>
+                    <td data-label="Type">
+                      <span :class="['badge', cost.type === 'income' ? 'badge-income' : 'badge-expense']">
+                        {{ cost.type === 'income' ? 'Income' : 'Expense' }}
+                      </span>
+                    </td>
+                    <td data-label="Category">{{ cost.category || '-' }}</td>
                     <td data-label="Amount">${{ parseFloat(cost.amount).toFixed(2) }}</td>
                     <td data-label="Actions">
                       <button @click="editCost(cost)" class="btn-icon" title="Edit">
@@ -119,7 +125,7 @@
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colspan="4"><strong>Total Additional Costs</strong></td>
+                    <td colspan="5"><strong>Net Additional Costs</strong></td>
                     <td><strong>${{ totalAdditionalCosts.toFixed(2) }}</strong></td>
                   </tr>
                 </tfoot>
@@ -167,9 +173,34 @@
           </div>
           
           <div class="form-group">
-            <label class="form-label">Type</label>
+            <label class="form-label">Type *</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input
+                  v-model="costForm.costType"
+                  type="radio"
+                  value="expense"
+                  class="radio-input"
+                />
+                <span>Expense</span>
+              </label>
+              <label class="radio-label">
+                <input
+                  v-model="costForm.costType"
+                  type="radio"
+                  value="income"
+                  class="radio-input"
+                />
+                <span>Income/Credit</span>
+              </label>
+            </div>
+            <small class="form-hint">Expenses add to cost, income offsets cost (e.g., selling a replaced part)</small>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Category</label>
             <input
-              v-model="costForm.type"
+              v-model="costForm.category"
               type="text"
               class="form-input"
               placeholder="e.g., Repair, Shipping, Parts"
@@ -227,7 +258,8 @@ const editingCost = ref(null)
 const costForm = ref({
   date: new Date().toISOString().split('T')[0],
   description: '',
-  type: '',
+  costType: 'expense',
+  category: '',
   amount: ''
 })
 const costError = ref('')
@@ -235,7 +267,10 @@ const savingCost = ref(false)
 
 const totalAdditionalCosts = computed(() => {
   if (!item.value?.additionalCosts?.length) return 0
-  return item.value.additionalCosts.reduce((sum, cost) => sum + parseFloat(cost.amount), 0)
+  return item.value.additionalCosts.reduce((sum, cost) => {
+    const amount = parseFloat(cost.amount)
+    return sum + (cost.type === 'income' ? -amount : amount)
+  }, 0)
 })
 
 const itemCost = computed(() => {
@@ -256,7 +291,8 @@ const editCost = (cost) => {
   costForm.value = {
     date: cost.date ? new Date(cost.date).toISOString().split('T')[0] : '',
     description: cost.description,
-    type: cost.type || '',
+    costType: cost.type || 'expense',
+    category: cost.category || '',
     amount: cost.amount
   }
 }
@@ -267,7 +303,8 @@ const closeCostModal = () => {
   costForm.value = {
     date: new Date().toISOString().split('T')[0],
     description: '',
-    type: '',
+    costType: 'expense',
+    category: '',
     amount: ''
   }
   costError.value = ''
@@ -282,7 +319,8 @@ const saveCost = async () => {
       itemId: item.value.id,
       date: costForm.value.date,
       description: costForm.value.description,
-      type: costForm.value.type || null,
+      type: costForm.value.costType,
+      category: costForm.value.category || null,
       amount: parseFloat(costForm.value.amount)
     }
     
@@ -394,6 +432,24 @@ onMounted(async () => {
 }
 
 .status-badge.sold {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.badge-expense {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.badge-income {
   background: #D1FAE5;
   color: #065F46;
 }
@@ -670,5 +726,29 @@ dd {
   border-radius: 0.375rem;
   font-size: 0.875rem;
   margin-top: 1rem;
+}
+
+.radio-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.radio-input {
+  cursor: pointer;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
 }
 </style>

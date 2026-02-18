@@ -67,6 +67,9 @@
                 
                 <dt>Total Revenue</dt>
                 <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
+                
+                <dt>Additional Costs</dt>
+                <dd>${{ stats.totalAdditionalCosts.toFixed(2) }}</dd>
               </template>
               
               <template v-if="bundle.type === 'sell'">
@@ -75,6 +78,9 @@
                 
                 <dt>Bundle Sale Price</dt>
                 <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
+                
+                <dt>Additional Costs</dt>
+                <dd>${{ stats.totalAdditionalCosts.toFixed(2) }}</dd>
               </template>
               
               <dt>Total Profit</dt>
@@ -100,8 +106,12 @@
                     <span class="label">Cost:</span>
                     <span class="value">${{ stats.costPerItem.toFixed(2) }}</span>
                   </div>
+                  <div class="detail-row" v-if="getItemAdditionalCosts(item) > 0">
+                    <span class="label">Additional Costs:</span>
+                    <span class="value">${{ getItemAdditionalCosts(item).toFixed(2) }}</span>
+                  </div>
                   <div class="detail-row">
-                    <span class="label">Expected Sale:</span>
+                    <span class="label">{{ item.status === 'sold' ? 'Sale:' : 'Expected Sale:' }}</span>
                     <input 
                       v-if="item.status === 'owned'"
                       type="number" 
@@ -116,7 +126,7 @@
                     </span>
                   </div>
                   <div v-if="item.expectedSalePrice || item.salePrice" class="detail-row profit-row">
-                    <span class="label">Expected Profit:</span>
+                    <span class="label">{{ item.status === 'sold' ? 'Profit:' : 'Expected Profit:' }}</span>
                     <span class="value" :class="calculateItemProfit(item) >= 0 ? 'profit-positive' : 'profit-negative'">
                       {{ formatProfit(calculateItemProfit(item)) }}
                     </span>
@@ -132,6 +142,10 @@
                 <div class="stat-item">
                   <span class="stat-label">Total Cost:</span>
                   <span class="stat-value">${{ parseFloat(bundle.purchasePrice || 0).toFixed(2) }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Additional Costs:</span>
+                  <span class="stat-value">${{ getTotalAdditionalCosts().toFixed(2) }}</span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-label">Expected Revenue:</span>
@@ -229,6 +243,21 @@ const updateExpectedPrice = async (itemId, value) => {
   }
 }
 
+const getItemAdditionalCosts = (item) => {
+  if (!item.additionalCosts || item.additionalCosts.length === 0) return 0
+  return item.additionalCosts.reduce((sum, cost) => {
+    const amount = parseFloat(cost.amount || 0)
+    return sum + (cost.type === 'income' ? -amount : amount)
+  }, 0)
+}
+
+const getTotalAdditionalCosts = () => {
+  if (!bundle.value?.items) return 0
+  return bundle.value.items.reduce((sum, item) => {
+    return sum + getItemAdditionalCosts(item)
+  }, 0)
+}
+
 const calculateExpectedRevenue = () => {
   if (!bundle.value?.items) return 0
   return bundle.value.items.reduce((sum, item) => {
@@ -244,7 +273,8 @@ const calculateExpectedRevenue = () => {
 const calculateExpectedProfit = () => {
   const revenue = calculateExpectedRevenue()
   const cost = parseFloat(bundle.value?.purchasePrice || 0)
-  return revenue - cost
+  const additionalCosts = getTotalAdditionalCosts()
+  return revenue - cost - additionalCosts
 }
 
 const calculateExpectedMargin = () => {
@@ -257,10 +287,11 @@ const calculateExpectedMargin = () => {
 const calculateItemProfit = (item) => {
   if (!stats.value) return 0
   const costPerItem = stats.value.costPerItem
+  const additionalCosts = getItemAdditionalCosts(item)
   if (item.status === 'sold') {
-    return (parseFloat(item.salePrice) || 0) - costPerItem
+    return (parseFloat(item.salePrice) || 0) - costPerItem - additionalCosts
   } else if (item.expectedSalePrice) {
-    return parseFloat(item.expectedSalePrice) - costPerItem
+    return parseFloat(item.expectedSalePrice) - costPerItem - additionalCosts
   }
   return 0
 }

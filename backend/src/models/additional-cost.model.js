@@ -28,6 +28,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: DataTypes.NOW
     },
     type: {
+      type: DataTypes.ENUM('expense', 'income'),
+      allowNull: false,
+      defaultValue: 'expense',
+      comment: 'expense for costs added, income for parts sold or credits'
+    },
+    category: {
       type: DataTypes.STRING,
       allowNull: true,
       comment: 'E.g., repair, shipping, parts, etc.'
