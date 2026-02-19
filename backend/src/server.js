@@ -47,8 +47,9 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
     
-    // Sync database
-    await sequelize.sync({ alter: process.env.NODE_ENV === 'development' });
+    // Sync database - disabled alter mode to prevent migration issues
+    // Use manual migrations in backend/src/migrations/ instead
+    await sequelize.sync({ alter: false });
     console.log('Database synchronized.');
     
     app.listen(PORT, () => {

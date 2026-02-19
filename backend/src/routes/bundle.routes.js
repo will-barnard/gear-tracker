@@ -208,7 +208,10 @@ router.get('/:id/stats', authMiddleware, async (req, res, next) => {
     const soldItems = items.filter(item => item.status === 'sold').length;
     
     const totalAdditionalCosts = items.reduce((sum, item) => {
-      const itemCosts = item.additionalCosts?.reduce((s, c) => s + parseFloat(c.amount || 0), 0) || 0;
+      const itemCosts = item.additionalCosts?.reduce((s, c) => {
+        const amount = parseFloat(c.amount || 0);
+        return s + (c.type === 'income' ? -amount : amount);
+      }, 0) || 0;
       return sum + itemCosts;
     }, 0);
     

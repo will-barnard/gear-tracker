@@ -244,9 +244,11 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
         itemCost = parseFloat(item.purchasePrice || 0);
       }
       
-      // Add additional costs
-      const additionalCosts = item.additionalCosts?.reduce((sum, cost) => 
-        sum + parseFloat(cost.amount || 0), 0) || 0;
+      // Add additional costs (expenses add, income subtracts)
+      const additionalCosts = item.additionalCosts?.reduce((sum, cost) => {
+        const amount = parseFloat(cost.amount || 0);
+        return sum + (cost.type === 'income' ? -amount : amount);
+      }, 0) || 0;
       
       statsByStatus[status].totalInvestment += itemCost + additionalCosts;
       
@@ -280,7 +282,10 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
         totalSalePrice: data.totalSalePrice,
         totalAdditionalCosts: items
           .filter(i => i.status === status)
-          .reduce((sum, item) => sum + (item.additionalCosts?.reduce((s, c) => s + parseFloat(c.amount || 0), 0) || 0), 0),
+          .reduce((sum, item) => sum + (item.additionalCosts?.reduce((s, c) => {
+            const amount = parseFloat(c.amount || 0);
+            return s + (c.type === 'income' ? -amount : amount);
+          }, 0) || 0), 0),
         totalInvestment: data.totalInvestment
       }));
     
