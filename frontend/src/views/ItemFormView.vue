@@ -123,6 +123,37 @@
           </p>
         </div>
         
+        <div class="form-section" v-if="formData.status === 'for_sale'">
+          <h3>For Sale Details</h3>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Projected Sale Price</label>
+              <input
+                v-model="formData.expectedSalePrice"
+                type="number"
+                step="0.01"
+                class="form-input"
+                placeholder="Expected selling price"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Listed Online</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input
+                    v-model="formData.isListedOnline"
+                    type="checkbox"
+                    class="checkbox-input"
+                  />
+                  <span>Item is actively listed in online marketplace</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div class="form-section" v-if="formData.status === 'sold'">
           <h3>Sale Details</h3>
           
@@ -252,6 +283,8 @@ const formData = ref({
   salePrice: '',
   saleDate: '',
   saleLocation: '',
+  expectedSalePrice: '',
+  isListedOnline: false,
   serialNumber: '',
   condition: '',
   notes: ''
@@ -429,5 +462,26 @@ onMounted(async () => {
 textarea.form-input {
   resize: vertical;
   font-family: inherit;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.checkbox-input {
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
 }
 </style>

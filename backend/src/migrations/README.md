@@ -135,3 +135,4 @@ If migrations fail due to database not being ready, the entrypoint script waits 
 
 1. **migrate-additional-costs-type.js**: Adds income/expense type to additional costs
 2. **migrate-item-status-for-sale.js**: Adds 'for_sale' status to items enum
+3. **migrate-add-is-listed-online.js**: Adds is_listed_online boolean field to items

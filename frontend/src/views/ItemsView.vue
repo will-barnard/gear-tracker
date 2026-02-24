@@ -185,7 +185,7 @@ const calculateTotalCost = (item) => {
 const getStatusLabel = (status) => {
   const labels = {
     'owned': 'Owned',
-    'for_sale': 'For Sale',
+    'for_sale': 'For\u00A0Sale',
     'sold': 'Sold'
   }
   return labels[status] || status

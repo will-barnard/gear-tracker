@@ -40,6 +40,37 @@
           {{ profit >= 0 ? '+' : '' }}${{ profit.toFixed(2) }}
         </p>
       </div>
+      
+      <div class="for-sale-section">
+        <h3 class="section-title">For Sale Inventory</h3>
+        <div class="stats-grid">
+          <div class="stat-card card">
+            <h3>Items for Sale</h3>
+            <p class="stat-value">{{ forSaleCount }}</p>
+            <p class="stat-label">Marked for sale</p>
+          </div>
+          
+          <div class="stat-card card">
+            <h3>Investment Value</h3>
+            <p class="stat-value">${{ forSaleInvestment.toFixed(2) }}</p>
+            <p class="stat-label">Total cost basis</p>
+          </div>
+          
+          <div class="stat-card card">
+            <h3>Items Listed</h3>
+            <p class="stat-value">{{ listedOnlineCount }}</p>
+            <p class="stat-label">Active marketplace listings</p>
+          </div>
+          
+          <div class="stat-card card">
+            <h3>Projected Profit</h3>
+            <p class="stat-value" :class="projectedProfit >= 0 ? 'positive' : 'negative'">
+              {{ projectedProfit >= 0 ? '+' : '' }}${{ projectedProfit.toFixed(2) }}
+            </p>
+            <p class="stat-label">Based on expected prices</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -82,6 +113,34 @@ const profit = computed(() => {
   const sold = stats.value.find(s => s.status === 'sold')
   const soldInvestment = parseFloat(sold?.totalInvestment || 0)
   return totalRevenue.value - soldInvestment
+})
+
+const forSaleCount = computed(() => {
+  if (!Array.isArray(stats.value)) return 0
+  const forSale = stats.value.find(s => s.status === 'for_sale')
+  return forSale?.count || 0
+})
+
+const forSaleInvestment = computed(() => {
+  if (!Array.isArray(stats.value)) return 0
+  const forSale = stats.value.find(s => s.status === 'for_sale')
+  return parseFloat(forSale?.totalInvestment || 0)
+})
+
+const expectedSaleValue = computed(() => {
+  if (!Array.isArray(stats.value)) return 0
+  const forSale = stats.value.find(s => s.status === 'for_sale')
+  return parseFloat(forSale?.totalSalePrice || 0)
+})
+
+const listedOnlineCount = computed(() => {
+  if (!Array.isArray(stats.value)) return 0
+  const forSale = stats.value.find(s => s.status === 'for_sale')
+  return forSale?.listedOnlineCount || 0
+})
+
+const projectedProfit = computed(() => {
+  return expectedSaleValue.value - forSaleInvestment.value
 })
 
 onMounted(async () => {
@@ -229,5 +288,27 @@ onMounted(async () => {
 
 .profit-value.negative {
   color: var(--danger-color);
+}
+
+.for-sale-section {
+  margin-top: 2rem;
+}
+
+.section-title {
+  font-size: 1.125rem;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+@media (min-width: 769px) {
+  .for-sale-section {
+    margin-top: 3rem;
+  }
+  
+  .section-title {
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
 }
 </style>

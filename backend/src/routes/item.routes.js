@@ -180,11 +180,15 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
     // Get all items with their bundles
     const items = await Item.findAll({
       where: { userId: req.user.id },
+      attributes: { 
+        exclude: [] // Let Sequelize handle missing columns gracefully
+      },
       include: [
         { model: Bundle, as: 'purchaseBundle' },
         { model: Bundle, as: 'saleBundle' },
         { model: AdditionalCost, as: 'additionalCosts' }
-      ]
+      ],
+      raw: false
     });
     
     // Get all sell bundles to track their revenue
@@ -199,6 +203,7 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
     // Calculate stats manually to account for bundles
     const statsByStatus = {
       owned: { count: 0, totalInvestment: 0, totalSalePrice: 0 },
+      for_sale: { count: 0, totalInvestment: 0, totalSalePrice: 0 },
       sold: { count: 0, totalInvestment: 0, totalSalePrice: 0 }
     };
     
@@ -257,7 +262,12 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       if (item.saleBundleId && item.saleBundle) {
         // Don't add individual item sale price for sell bundles
       } else {
-        statsByStatus[status].totalSalePrice += parseFloat(item.salePrice || 0);
+        // For sold items, use actual sale price; for for_sale items, use expected price
+        if (status === 'sold') {
+          statsByStatus[status].totalSalePrice += parseFloat(item.salePrice || 0);
+        } else if (status === 'for_sale') {
+          statsByStatus[status].totalSalePrice += parseFloat(item.expectedSalePrice || 0);
+        }
       }
     });
     
@@ -278,6 +288,10 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       .map(([status, data]) => ({
         status,
         count: data.count,
+        listedOnlineCount: items.filter(i => {
+          // Handle case where isListedOnline doesn't exist yet (migration not run)
+          return i.status === status && i.isListedOnline === true;
+        }).length,
         totalPurchasePrice: data.totalInvestment - (data.totalAdditionalCosts || 0),
         totalSalePrice: data.totalSalePrice,
         totalAdditionalCosts: items
@@ -293,6 +307,15 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       stats: enrichedStats
     });
   } catch (error) {
+    // Check if error is due to missing column (migration not run)
+    if (error.message && error.message.includes('is_listed_online')) {
+      console.error('❌ Migration required: is_listed_online column is missing');
+      console.error('Run: docker-compose exec backend node src/migrations/run-migrations.js');
+      return res.status(500).json({ 
+        error: 'Database migration required. Please run migrations.',
+        details: 'The is_listed_online column is missing. Run: docker-compose exec backend node src/migrations/run-migrations.js'
+      });
+    }
     next(error);
   }
 });

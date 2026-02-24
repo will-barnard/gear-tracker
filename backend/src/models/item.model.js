@@ -94,6 +94,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true
     },
+    isListedOnline: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true

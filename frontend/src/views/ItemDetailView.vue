@@ -62,6 +62,21 @@
             </dl>
           </div>
           
+          <div v-if="item.status === 'for_sale'" class="detail-card card">
+            <h3>For Sale Details</h3>
+            <dl>
+              <dt>Projected Sale Price</dt>
+              <dd>{{ item.expectedSalePrice ? `$${parseFloat(item.expectedSalePrice).toFixed(2)}` : '-' }}</dd>
+              <dt>Listed Online</dt>
+              <dd>{{ item.isListedOnline ? '✓ Yes' : '✗ No' }}</dd>
+              <dt>Projected Profit</dt>
+              <dd v-if="item.expectedSalePrice" :class="(parseFloat(item.expectedSalePrice) - itemCost.value - totalAdditionalCosts.value) >= 0 ? 'profit' : 'loss'">
+                {{ (parseFloat(item.expectedSalePrice) - itemCost.value - totalAdditionalCosts.value) >= 0 ? '+' : '' }}${{ (parseFloat(item.expectedSalePrice) - itemCost.value - totalAdditionalCosts.value).toFixed(2) }}
+              </dd>
+              <dd v-else>-</dd>
+            </dl>
+          </div>
+          
           <div v-if="item.status === 'sold'" class="detail-card card">
             <h3>Sale Details</h3>
             <dl>
@@ -289,7 +304,7 @@ const profit = computed(() => {
 const getStatusLabel = (status) => {
   const labels = {
     'owned': 'Owned',
-    'for_sale': 'For Sale',
+    'for_sale': 'For\u00A0Sale',
     'sold': 'Sold'
   }
   return labels[status] || status

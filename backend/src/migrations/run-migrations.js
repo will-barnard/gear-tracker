@@ -32,7 +32,8 @@ const sequelize = new Sequelize(
 // Migration files in order (add new migrations to the end)
 const migrations = [
   'migrate-additional-costs-type.js',
-  'migrate-item-status-for-sale.js'
+  'migrate-item-status-for-sale.js',
+  'migrate-add-is-listed-online.js'
 ];
 
 async function runMigrations() {
