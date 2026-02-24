@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const authMiddleware = require('../middleware/auth.middleware');
-const { Item, Category, AdditionalCost } = require('../models');
+const { Item, Category, AdditionalCost, Bundle } = require('../models');
 const { Sequelize, Op } = require('sequelize');
 
 const router = express.Router();
@@ -61,15 +61,20 @@ router.get('/', authMiddleware, async (req, res, next) => {
     const offset = (page - 1) * limit;
     
     // Handle purchaseDate sorting with NULLS LAST for PostgreSQL
-    const orderClause = sortBy === 'purchaseDate' 
-      ? [[Sequelize.literal(`"purchaseDate" ${sortOrder} NULLS LAST`)]]
-      : [[sortBy, sortOrder]];
+    // Use bundle's purchaseDate if item is in a bundle, otherwise use item's purchaseDate
+    let orderClause;
+    if (sortBy === 'purchaseDate') {
+      orderClause = [[Sequelize.literal(`COALESCE("purchaseBundle"."purchaseDate", "Item"."purchaseDate") ${sortOrder}`)]]
+    } else {
+      orderClause = [[sortBy, sortOrder]]
+    }
     
     const { count, rows } = await Item.findAndCountAll({
       where,
       include: [
         { model: Category, as: 'category' },
-        { model: AdditionalCost, as: 'additionalCosts' }
+        { model: AdditionalCost, as: 'additionalCosts' },
+        { model: Bundle, as: 'purchaseBundle', attributes: ['id', 'name', 'purchaseDate'], required: false }
       ],
       order: orderClause,
       limit: parseInt(limit),
@@ -93,7 +98,6 @@ router.get('/', authMiddleware, async (req, res, next) => {
 // Get single item
 router.get('/:id', authMiddleware, async (req, res, next) => {
   try {
-    const { Bundle } = require('../models');
     const item = await Item.findOne({
       where: { id: req.params.id, userId: req.user.id },
       include: [
