@@ -8,7 +8,12 @@
         <router-link to="/items/new" class="btn btn-primary">Quick Add Item</router-link>
       </div>
       
-      <div class="stats-grid">
+      <div v-if="loading" class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading dashboard...</p>
+      </div>
+      
+      <div v-else class="stats-grid">
         <div class="stat-card card">
           <h3>Owned Items</h3>
           <p class="stat-value">{{ ownedCount }}</p>
@@ -34,14 +39,14 @@
         </div>
       </div>
       
-      <div class="profit-card card">
+      <div v-if="!loading" class="profit-card card">
         <h3>Total Profit/Loss</h3>
         <p class="profit-value" :class="profit >= 0 ? 'positive' : 'negative'">
           {{ profit >= 0 ? '+' : '' }}${{ profit.toFixed(2) }}
         </p>
       </div>
       
-      <div class="for-sale-section">
+      <div v-if="!loading" class="for-sale-section">
         <h3 class="section-title">For Sale Inventory</h3>
         <div class="stats-grid">
           <div class="stat-card card">
@@ -82,6 +87,7 @@ import { useItemStore } from '@/stores/item'
 
 const itemStore = useItemStore()
 
+const loading = ref(true)
 const stats = ref([])
 
 const ownedCount = computed(() => {
@@ -144,8 +150,13 @@ const projectedProfit = computed(() => {
 })
 
 onMounted(async () => {
-  const response = await itemStore.getStats()
-  stats.value = response.stats || []
+  loading.value = true
+  try {
+    const response = await itemStore.getStats()
+    stats.value = response.stats || []
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 
@@ -299,6 +310,38 @@ onMounted(async () => {
   color: var(--text-primary);
   margin-bottom: 1rem;
   font-weight: 600;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  gap: 1rem;
+}
+
+.loading-container p {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 @media (min-width: 769px) {

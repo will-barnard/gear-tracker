@@ -46,7 +46,10 @@
       </div>
     </div>
     
-    <div v-if="itemStore.loading" class="loading">Loading...</div>
+    <div v-if="itemStore.loading" class="loading-container">
+      <div class="spinner"></div>
+      <p>Loading items...</p>
+    </div>
     
     <div v-else-if="displayItems.length === 0" class="empty-state card">
       <p>{{ emptyMessage }}</p>
@@ -558,6 +561,38 @@ onMounted(async () => {
   .btn-sm {
     font-size: 0.875rem;
     padding: 0.5rem 1rem;
+  }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  gap: 1rem;
+}
+
+.loading-container p {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
   }
 }
 </style>
