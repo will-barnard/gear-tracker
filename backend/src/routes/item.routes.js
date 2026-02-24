@@ -2,7 +2,7 @@ const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const authMiddleware = require('../middleware/auth.middleware');
 const { Item, Category, AdditionalCost } = require('../models');
-const { Op } = require('sequelize');
+const { Sequelize, Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -60,13 +60,18 @@ router.get('/', authMiddleware, async (req, res, next) => {
     
     const offset = (page - 1) * limit;
     
+    // Handle purchaseDate sorting with NULLS LAST for PostgreSQL
+    const orderClause = sortBy === 'purchaseDate' 
+      ? [[Sequelize.literal(`"purchaseDate" ${sortOrder} NULLS LAST`)]]
+      : [[sortBy, sortOrder]];
+    
     const { count, rows } = await Item.findAndCountAll({
       where,
       include: [
         { model: Category, as: 'category' },
         { model: AdditionalCost, as: 'additionalCosts' }
       ],
-      order: [[sortBy, sortOrder]],
+      order: orderClause,
       limit: parseInt(limit),
       offset: parseInt(offset)
     });

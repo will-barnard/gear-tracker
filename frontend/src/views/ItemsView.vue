@@ -159,13 +159,13 @@ const itemStore = useItemStore()
 const categoryStore = useCategoryStore()
 
 const showFilters = ref(false)
-const viewMode = ref('grid')
+const viewMode = ref('table')
 
 const filters = ref({
   search: '',
   status: '',
   categoryId: '',
-  sortBy: 'createdAt',
+  sortBy: 'purchaseDate',
   page: 1
 })
 

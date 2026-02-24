@@ -70,8 +70,8 @@
               <dt>Listed Online</dt>
               <dd>{{ item.isListedOnline ? '✓ Yes' : '✗ No' }}</dd>
               <dt>Projected Profit</dt>
-              <dd v-if="item.expectedSalePrice" :class="(parseFloat(item.expectedSalePrice) - itemCost.value - totalAdditionalCosts.value) >= 0 ? 'profit' : 'loss'">
-                {{ (parseFloat(item.expectedSalePrice) - itemCost.value - totalAdditionalCosts.value) >= 0 ? '+' : '' }}${{ (parseFloat(item.expectedSalePrice) - itemCost.value - totalAdditionalCosts.value).toFixed(2) }}
+              <dd v-if="item.expectedSalePrice" :class="projectedProfit >= 0 ? 'profit' : 'loss'">
+                {{ projectedProfit >= 0 ? '+' : '' }}${{ projectedProfit.toFixed(2) }}
               </dd>
               <dd v-else>-</dd>
             </dl>
@@ -299,6 +299,12 @@ const profit = computed(() => {
   if (!item.value || item.value.status !== 'sold') return 0
   const sale = parseFloat(item.value.salePrice || 0)
   return sale - itemCost.value - totalAdditionalCosts.value
+})
+
+const projectedProfit = computed(() => {
+  if (!item.value || item.value.status !== 'for_sale' || !item.value.expectedSalePrice) return 0
+  const expectedSale = parseFloat(item.value.expectedSalePrice || 0)
+  return expectedSale - itemCost.value - totalAdditionalCosts.value
 })
 
 const getStatusLabel = (status) => {
