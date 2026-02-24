@@ -7,7 +7,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "build": "echo 'No build step needed for backend'",
-    "migrate": "node src/migrations/run.js",
+    "migrate": "node src/migrations/run-migrations.js",
     "seed": "node src/seeders/run.js"
   },
   "dependencies": {

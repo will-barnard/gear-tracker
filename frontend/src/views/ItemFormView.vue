@@ -57,6 +57,7 @@
               <label class="form-label">Status</label>
               <select v-model="formData.status" class="form-input">
                 <option value="owned">Owned</option>
+                <option value="for_sale">For Sale</option>
                 <option value="sold">Sold</option>
               </select>
             </div>

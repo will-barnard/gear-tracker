@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/for-sale',
+      name: 'ForSale',
+      component: () => import('@/views/ForSaleView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/items/new',
       name: 'NewItem',
       component: () => import('@/views/ItemFormView.vue'),

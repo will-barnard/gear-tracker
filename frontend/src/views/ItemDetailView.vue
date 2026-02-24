@@ -9,7 +9,7 @@
         <div class="detail-header">
           <div>
             <h2>{{ item.name }}</h2>
-            <span class="status-badge" :class="item.status">{{ item.status }}</span>
+            <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
           </div>
           <div class="header-actions">
             <router-link :to="`/items/${item.id}/edit`" class="btn btn-primary">Edit</router-link>
@@ -286,6 +286,15 @@ const profit = computed(() => {
   return sale - itemCost.value - totalAdditionalCosts.value
 })
 
+const getStatusLabel = (status) => {
+  const labels = {
+    'owned': 'Owned',
+    'for_sale': 'For Sale',
+    'sold': 'Sold'
+  }
+  return labels[status] || status
+}
+
 const editCost = (cost) => {
   editingCost.value = cost
   costForm.value = {
@@ -429,6 +438,11 @@ onMounted(async () => {
 .status-badge.owned {
   background: #DBEAFE;
   color: #1E40AF;
+}
+
+.status-badge.for_sale {
+  background: #FEF3C7;
+  color: #92400E;
 }
 
 .status-badge.sold {

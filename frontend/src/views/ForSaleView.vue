@@ -1,10 +1,10 @@
 <template>
-  <div class="items-view">
+  <div class="for-sale-view">
     <NavBar />
     
     <div class="container">
       <div class="items-header">
-        <h2>Items</h2>
+        <h2>🏷️ For Sale</h2>
         <div class="header-actions">
           <button @click="viewMode = viewMode === 'grid' ? 'table' : 'grid'" class="btn btn-secondary">
             {{ viewMode === 'grid' ? '📋 Table' : '🎴 Grid' }}
@@ -12,7 +12,6 @@
           <button @click="showFilters = !showFilters" class="btn btn-secondary">
             {{ showFilters ? 'Hide' : 'Show' }} Filters
           </button>
-          <router-link to="/items/new" class="btn btn-primary">Add Item</router-link>
         </div>
       </div>
       
@@ -26,13 +25,6 @@
             @input="applyFilters"
           />
           
-          <select v-model="filters.status" class="form-input" @change="applyFilters">
-            <option value="">All Statuses</option>
-            <option value="owned">Owned</option>
-            <option value="for_sale">For Sale</option>
-            <option value="sold">Sold</option>
-          </select>
-          
           <select v-model="filters.categoryId" class="form-input" @change="applyFilters">
             <option value="">All Categories</option>
             <option v-for="cat in categories" :key="cat.id" :value="cat.id">
@@ -43,7 +35,7 @@
           <select v-model="filters.sortBy" class="form-input" @change="applyFilters">
             <option value="createdAt">Date Added</option>
             <option value="name">Name</option>
-            <option value="purchasePrice">Price</option>
+            <option value="expectedSalePrice">Expected Price</option>
             <option value="purchaseDate">Purchase Date</option>
           </select>
         </div>
@@ -52,18 +44,15 @@
       <div v-if="itemStore.loading" class="loading">Loading...</div>
       
       <div v-else-if="itemStore.items.length === 0" class="empty-state card">
-        <p>No items found. Add your first item to get started!</p>
+        <p>No items for sale. Items with "For Sale" status will appear here.</p>
       </div>
       
       <!-- Grid View -->
       <div v-else-if="viewMode === 'grid'" class="items-grid">
         <div v-for="item in itemStore.items" :key="item.id" class="item-card card">
           <div class="item-header">
-            <div class="item-title">
-              <span v-if="item.status === 'for_sale'" class="for-sale-flag" title="For Sale">🏷️</span>
-              <h3>{{ item.name }}</h3>
-            </div>
-            <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
+            <h3>{{ item.name }}</h3>
+            <span class="status-badge for-sale">For Sale</span>
           </div>
           
           <div class="item-details">
@@ -75,7 +64,7 @@
               </span>
             </p>
             <p v-if="calculateTotalCost(item) > 0"><strong>Total Cost:</strong> ${{ calculateTotalCost(item).toFixed(2) }}</p>
-            <p v-if="item.salePrice"><strong>Sale:</strong> ${{ parseFloat(item.salePrice).toFixed(2) }}</p>
+            <p v-if="item.expectedSalePrice"><strong>Expected Price:</strong> ${{ parseFloat(item.expectedSalePrice).toFixed(2) }}</p>
           </div>
           
           <div class="item-actions">
@@ -94,18 +83,14 @@
               <th>Brand</th>
               <th>Model</th>
               <th>Category</th>
-              <th>Status</th>
-              <th>Purchase</th>
-              <th>Sale</th>
+              <th>Cost</th>
+              <th>Expected Price</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="item in itemStore.items" :key="item.id">
-              <td data-label="Name">
-                <span v-if="item.status === 'for_sale'" class="for-sale-flag" title="For Sale">🏷️</span>
-                {{ item.name }}
-              </td>
+              <td data-label="Name">{{ item.name }}</td>
               <td data-label="Brand">{{ item.brand || '-' }}</td>
               <td data-label="Model">{{ item.model || '-' }}</td>
               <td data-label="Category">
@@ -114,11 +99,8 @@
                 </span>
                 <span v-else>-</span>
               </td>
-              <td data-label="Status">
-                <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
-              </td>
-              <td data-label="Purchase">${{ item.purchasePrice ? parseFloat(item.purchasePrice).toFixed(2) : '0.00' }}</td>
-              <td data-label="Sale">${{ item.salePrice ? parseFloat(item.salePrice).toFixed(2) : '-' }}</td>
+              <td data-label="Cost">${{ calculateTotalCost(item).toFixed(2) }}</td>
+              <td data-label="Expected Price">${{ item.expectedSalePrice ? parseFloat(item.expectedSalePrice).toFixed(2) : '-' }}</td>
               <td data-label="Actions" class="table-actions">
                 <router-link :to="`/items/${item.id}`" class="btn btn-secondary btn-sm">View</router-link>
                 <router-link :to="`/items/${item.id}/edit`" class="btn btn-primary btn-sm">Edit</router-link>
@@ -163,7 +145,7 @@ const viewMode = ref('grid')
 
 const filters = ref({
   search: '',
-  status: '',
+  status: 'for_sale', // Fixed to for_sale status
   categoryId: '',
   sortBy: 'createdAt',
   page: 1
@@ -180,15 +162,6 @@ const calculateTotalCost = (item) => {
   const purchase = parseFloat(item.purchasePrice || 0)
   const additional = calculateAdditionalCosts(item)
   return purchase + additional
-}
-
-const getStatusLabel = (status) => {
-  const labels = {
-    'owned': 'Owned',
-    'for_sale': 'For Sale',
-    'sold': 'Sold'
-  }
-  return labels[status] || status
 }
 
 const applyFilters = () => {
@@ -264,7 +237,7 @@ onMounted(async () => {
 
 @media (min-width: 1024px) {
   .filters-row {
-    grid-template-columns: 2fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr;
     gap: 1rem;
   }
   
@@ -306,32 +279,9 @@ onMounted(async () => {
   align-items: start;
 }
 
-.item-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .item-header h3 {
   color: var(--text-primary);
   margin: 0;
-}
-
-.for-sale-flag {
-  font-size: 1.25rem;
-  line-height: 1;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.1);
-  }
 }
 
 .status-badge {
@@ -342,19 +292,9 @@ onMounted(async () => {
   text-transform: uppercase;
 }
 
-.status-badge.owned {
-  background: #DBEAFE;
-  color: #1E40AF;
-}
-
-.status-badge.for_sale {
+.status-badge.for-sale {
   background: #FEF3C7;
   color: #92400E;
-}
-
-.status-badge.sold {
-  background: #D1FAE5;
-  color: #065F46;
 }
 
 .item-details p {

@@ -12,19 +12,20 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'geartracker',
-  process.env.DB_USER || 'geartracker',
-  process.env.DB_PASSWORD || 'password',
-  {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    dialect: 'postgres',
-    logging: console.log
-  }
-);
+async function migrate(sequelizeInstance) {
+  // Use provided instance or create new one
+  const sequelize = sequelizeInstance || new Sequelize(
+    process.env.DB_NAME || 'geartracker',
+    process.env.DB_USER || 'geartracker',
+    process.env.DB_PASSWORD || 'password',
+    {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      dialect: 'postgres',
+      logging: console.log
+    }
+  );
 
-async function migrate() {
   try {
     console.log('Starting migration...');
     
@@ -83,12 +84,22 @@ async function migrate() {
     }
     
     console.log('\n✅ Migration completed successfully!');
-    process.exit(0);
   } catch (error) {
     console.error('❌ Migration failed:', error.message);
-    console.error(error);
-    process.exit(1);
+    throw error;
+  } finally {
+    // Only close if we created our own instance
+    if (!sequelizeInstance) {
+      await sequelize.close();
+    }
   }
 }
 
-migrate();
+// Only run if called directly
+if (require.main === module) {
+  migrate()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}
+
+module.exports = migrate;
