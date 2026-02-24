@@ -26,7 +26,7 @@
               <dt>Model</dt>
               <dd>{{ item.model || '-' }}</dd>
               <dt>Category</dt>
-              <dd>{{ item.category?.name || '-' }}</dd>
+              <dd>{{ item.category?.name.replace(/ /g, '\u00A0') || '-' }}</dd>
               <dt v-if="item.purchaseBundle || item.saleBundle">Bundles</dt>
               <dd v-if="item.purchaseBundle || item.saleBundle">
                 <div class="bundle-links">

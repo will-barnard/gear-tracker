@@ -71,7 +71,7 @@
             <p v-if="item.category" class="category-display">
               <strong>Category:</strong>
               <span class="category-badge" :style="{ backgroundColor: item.category.color }">
-                {{ item.category.name }}
+                {{ item.category.name.replace(/ /g, '\u00A0') }}
               </span>
             </p>
             <p v-if="calculateTotalCost(item) > 0"><strong>Total Cost:</strong> ${{ calculateTotalCost(item).toFixed(2) }}</p>
@@ -110,7 +110,7 @@
               <td data-label="Model">{{ item.model || '-' }}</td>
               <td data-label="Category">
                 <span v-if="item.category" class="category-badge" :style="{ backgroundColor: item.category.color }">
-                  {{ item.category.name }}
+                  {{ item.category.name.replace(/ /g, '\u00A0') }}
                 </span>
                 <span v-else>-</span>
               </td>
@@ -372,6 +372,8 @@ onMounted(async () => {
 
 .category-badge {
   display: inline-block;
+  width: fit-content;
+  flex: 0 0 auto;
   padding: 0.25rem 0.75rem;
   border-radius: 0.375rem;
   font-size: 0.75rem;
