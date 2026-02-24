@@ -33,7 +33,8 @@ const sequelize = new Sequelize(
 const migrations = [
   'migrate-additional-costs-type.js',
   'migrate-item-status-for-sale.js',
-  'migrate-add-is-listed-online.js'
+  'migrate-add-is-listed-online.js',
+  'migrate-sync-bundle-purchase-dates.js'
 ];
 
 async function runMigrations() {

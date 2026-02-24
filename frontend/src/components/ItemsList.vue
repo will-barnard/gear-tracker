@@ -48,13 +48,13 @@
     
     <div v-if="itemStore.loading" class="loading">Loading...</div>
     
-    <div v-else-if="itemStore.items.length === 0" class="empty-state card">
+    <div v-else-if="displayItems.length === 0" class="empty-state card">
       <p>{{ emptyMessage }}</p>
     </div>
     
     <!-- Grid View -->
     <div v-else-if="viewMode === 'grid'" class="items-grid">
-      <div v-for="item in itemStore.items" :key="item.id" class="item-card card">
+      <div v-for="item in displayItems" :key="item.id" class="item-card card">
         <div class="item-header">
           <div class="item-title">
             <span v-if="item.status === 'for_sale'" class="for-sale-flag" title="For Sale">🏷️</span>
@@ -98,7 +98,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in itemStore.items" :key="item.id">
+          <tr v-for="item in displayItems" :key="item.id">
             <td data-label="Name">
               <span v-if="item.status === 'for_sale'" class="for-sale-flag" title="For Sale">🏷️</span>
               {{ item.name }}
@@ -146,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useItemStore } from '@/stores/item'
 import { useCategoryStore } from '@/stores/category'
 
@@ -181,6 +181,32 @@ const filters = ref({
 })
 
 const categories = ref([])
+
+// Computed property for display-sorted items
+// When sorting by purchaseDate, prioritize saleDate over purchaseDate
+const displayItems = computed(() => {
+  if (filters.value.sortBy !== 'purchaseDate') {
+    return itemStore.items
+  }
+  
+  // Create a copy and sort by display date (saleDate if available, else purchaseDate)
+  return [...itemStore.items].sort((a, b) => {
+    const dateA = a.saleDate || a.purchaseDate
+    const dateB = b.saleDate || b.purchaseDate
+    
+    // Handle null dates - items without dates go to the end
+    if (!dateA && !dateB) return 0
+    if (!dateA) return 1
+    if (!dateB) return -1
+    
+    // Sort descending (most recent first)
+    if (filters.value.sortOrder === 'DESC') {
+      return new Date(dateB) - new Date(dateA)
+    } else {
+      return new Date(dateA) - new Date(dateB)
+    }
+  })
+})
 
 const calculateAdditionalCosts = (item) => {
   if (!item.additionalCosts?.length) return 0

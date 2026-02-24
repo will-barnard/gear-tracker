@@ -60,22 +60,28 @@ router.get('/', authMiddleware, async (req, res, next) => {
     
     const offset = (page - 1) * limit;
     
-    // Handle purchaseDate sorting with NULLS LAST for PostgreSQL
-    // Use bundle's purchaseDate if item is in a bundle, otherwise use item's purchaseDate
-    let orderClause;
+    // Include purchase bundle for all queries to get bundle purchase dates
+    const includeOptions = [
+      { model: Category, as: 'category' },
+      { model: AdditionalCost, as: 'additionalCosts' }
+    ];
+    
+    // Add bundle if sorting by purchase date to get bundle's purchase date
     if (sortBy === 'purchaseDate') {
-      orderClause = [[Sequelize.literal(`COALESCE("purchaseBundle"."purchaseDate", "Item"."purchaseDate") ${sortOrder}`)]]
-    } else {
-      orderClause = [[sortBy, sortOrder]]
+      includeOptions.push({ 
+        model: Bundle, 
+        as: 'purchaseBundle', 
+        attributes: ['id', 'name', 'purchaseDate'], 
+        required: false 
+      });
     }
+    
+    // Handle purchaseDate sorting - use item's purchaseDate (items in bundles should have bundle's date copied)
+    const orderClause = [[sortBy, sortOrder]];
     
     const { count, rows } = await Item.findAndCountAll({
       where,
-      include: [
-        { model: Category, as: 'category' },
-        { model: AdditionalCost, as: 'additionalCosts' },
-        { model: Bundle, as: 'purchaseBundle', attributes: ['id', 'name', 'purchaseDate'], required: false }
-      ],
+      include: includeOptions,
       order: orderClause,
       limit: parseInt(limit),
       offset: parseInt(offset)
@@ -125,10 +131,28 @@ router.post('/',
   validateRequest,
   async (req, res, next) => {
     try {
-      const item = await Item.create({
+      const itemData = {
         ...req.body,
         userId: req.user.id
-      });
+      };
+      
+      // If item is in a purchase bundle, set purchaseDate from bundle
+      if (itemData.purchaseBundleId) {
+        const bundle = await Bundle.findByPk(itemData.purchaseBundleId);
+        if (bundle && bundle.purchaseDate) {
+          itemData.purchaseDate = bundle.purchaseDate;
+        }
+      }
+      
+      // If item is in a sale bundle, set saleDate from bundle
+      if (itemData.saleBundleId) {
+        const bundle = await Bundle.findByPk(itemData.saleBundleId);
+        if (bundle && bundle.saleDate) {
+          itemData.saleDate = bundle.saleDate;
+        }
+      }
+      
+      const item = await Item.create(itemData);
       
       res.status(201).json(item);
     } catch (error) {
@@ -148,7 +172,25 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
       return res.status(404).json({ error: 'Item not found' });
     }
     
-    await item.update(req.body);
+    const updateData = { ...req.body };
+    
+    // If purchaseBundleId is being set or changed, update purchaseDate from bundle
+    if (updateData.purchaseBundleId && updateData.purchaseBundleId !== item.purchaseBundleId) {
+      const bundle = await Bundle.findByPk(updateData.purchaseBundleId);
+      if (bundle && bundle.purchaseDate) {
+        updateData.purchaseDate = bundle.purchaseDate;
+      }
+    }
+    
+    // If saleBundleId is being set or changed, update saleDate from bundle
+    if (updateData.saleBundleId && updateData.saleBundleId !== item.saleBundleId) {
+      const bundle = await Bundle.findByPk(updateData.saleBundleId);
+      if (bundle && bundle.saleDate) {
+        updateData.saleDate = bundle.saleDate;
+      }
+    }
+    
+    await item.update(updateData);
     
     const updatedItem = await Item.findByPk(item.id, {
       include: [

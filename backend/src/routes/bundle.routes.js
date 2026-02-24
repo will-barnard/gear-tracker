@@ -122,6 +122,22 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
     
     await bundle.update(req.body);
     
+    // If bundle is a 'buy' type and purchaseDate was updated, update all items in the bundle
+    if (bundle.type === 'buy' && req.body.purchaseDate) {
+      await Item.update(
+        { purchaseDate: req.body.purchaseDate },
+        { where: { purchaseBundleId: bundle.id } }
+      );
+    }
+    
+    // If bundle is a 'sell' type and saleDate was updated, update all items in the bundle
+    if (bundle.type === 'sell' && req.body.saleDate) {
+      await Item.update(
+        { saleDate: req.body.saleDate },
+        { where: { saleBundleId: bundle.id } }
+      );
+    }
+    
     // Determine which association to include based on bundle type
     const includeOptions = bundle.type === 'buy'
       ? {
