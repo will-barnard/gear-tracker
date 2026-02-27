@@ -106,6 +106,17 @@ export const useBundleStore = defineStore('bundle', {
         this.error = error.response?.data?.error || 'Failed to fetch bundle stats'
         throw error
       }
+    },
+
+    async rebalanceBundle(id) {
+      try {
+        const response = await api.post(`/bundles/${id}/rebalance`)
+        this.currentBundle = response.data
+        return response.data
+      } catch (error) {
+        this.error = error.response?.data?.error || 'Failed to rebalance bundle'
+        throw error
+      }
     }
   }
 })

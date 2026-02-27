@@ -197,6 +197,82 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   }
 });
 
+// Rebalance item cost basis by expected sale price weights
+router.post('/:id/rebalance', authMiddleware, async (req, res, next) => {
+  try {
+    const bundle = await Bundle.findOne({
+      where: { id: req.params.id, userId: req.user.id }
+    });
+
+    if (!bundle) {
+      return res.status(404).json({ error: 'Bundle not found' });
+    }
+
+    if (bundle.type !== 'buy') {
+      return res.status(400).json({ error: 'Rebalancing is only supported for buy bundles' });
+    }
+
+    const bundleWithItems = await Bundle.findOne({
+      where: { id: req.params.id, userId: req.user.id },
+      include: [{
+        model: Item,
+        as: 'purchasedItems'
+      }]
+    });
+
+    const items = bundleWithItems.purchasedItems;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: 'Bundle has no items to rebalance' });
+    }
+
+    // Use expectedSalePrice for owned items, salePrice for sold items
+    const prices = items.map(item => {
+      if (item.status === 'sold') {
+        return { id: item.id, price: parseFloat(item.salePrice || 0) };
+      }
+      return { id: item.id, price: parseFloat(item.expectedSalePrice || 0) };
+    });
+
+    const missingPrices = prices.filter(p => p.price <= 0);
+    if (missingPrices.length > 0) {
+      return res.status(400).json({
+        error: 'All items must have an expected sale price (or actual sale price if sold) before rebalancing'
+      });
+    }
+
+    const totalExpected = prices.reduce((sum, p) => sum + p.price, 0);
+    const bundleCost = parseFloat(bundle.purchasePrice || 0);
+
+    // Update each item's purchasePrice based on its weight
+    await Promise.all(prices.map(p => {
+      const weight = p.price / totalExpected;
+      const newCost = Math.round(bundleCost * weight * 100) / 100;
+      return Item.update(
+        { purchasePrice: newCost },
+        { where: { id: p.id, userId: req.user.id } }
+      );
+    }));
+
+    // Return updated bundle with items
+    const updatedBundle = await Bundle.findOne({
+      where: { id: req.params.id, userId: req.user.id },
+      include: [{
+        model: Item,
+        as: 'purchasedItems',
+        include: [{ model: require('../models').AdditionalCost, as: 'additionalCosts' }]
+      }]
+    });
+
+    const bundleData = updatedBundle.toJSON();
+    bundleData.items = bundleData.purchasedItems;
+
+    res.json(bundleData);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get bundle statistics
 router.get('/:id/stats', authMiddleware, async (req, res, next) => {
   try {
@@ -237,12 +313,21 @@ router.get('/:id/stats', authMiddleware, async (req, res, next) => {
     let totalProfit = 0;
     
     if (bundle.type === 'buy') {
-      // Buy bundle: distribute purchase cost across items
+      // Check if items have been rebalanced (individual purchasePrice set)
+      const hasRebalancedWeights = items.some(item => item.purchasePrice != null && parseFloat(item.purchasePrice) > 0);
       costPerItem = totalItems > 0 ? parseFloat(bundle.purchasePrice || 0) / totalItems : 0;
       totalRevenue = items
         .filter(item => item.status === 'sold')
         .reduce((sum, item) => sum + parseFloat(item.salePrice || 0), 0);
-      totalCost = costPerItem * soldItems + totalAdditionalCosts;
+      if (hasRebalancedWeights) {
+        // Use individual rebalanced costs for sold items
+        const soldCost = items
+          .filter(item => item.status === 'sold')
+          .reduce((sum, item) => sum + parseFloat(item.purchasePrice || 0), 0);
+        totalCost = soldCost + totalAdditionalCosts;
+      } else {
+        totalCost = costPerItem * soldItems + totalAdditionalCosts;
+      }
       totalProfit = totalRevenue - totalCost;
     } else {
       // Sell bundle: sum item costs, bundle sale price is revenue

@@ -62,8 +62,15 @@
               <dd>{{ stats.soldItems }}</dd>
               
               <template v-if="bundle.type === 'buy'">
-                <dt>Cost Per Item</dt>
-                <dd>${{ stats.costPerItem.toFixed(2) }}</dd>
+                <template v-if="isRebalanced">
+                  <dt>Total Cost Basis</dt>
+                  <dd>${{ parseFloat(bundle.purchasePrice || 0).toFixed(2) }}</dd>
+                  <dd style="grid-column: 1 / -1; font-size: 0.75rem; color: var(--text-secondary); font-style: italic; margin-top: -0.25rem;">Rebalanced by weight</dd>
+                </template>
+                <template v-else>
+                  <dt>Cost Per Item</dt>
+                  <dd>${{ stats.costPerItem.toFixed(2) }}</dd>
+                </template>
                 
                 <dt>Total Revenue</dt>
                 <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
@@ -92,7 +99,12 @@
           
           <!-- Expected Sales Section (Buy Bundles Only) -->
           <div v-if="bundle.type === 'buy'" class="detail-card card full-width">
-            <h3>Expected Sales & Profit Estimation</h3>
+            <div class="section-header">
+              <h3>Expected Sales & Profit Estimation</h3>
+              <button @click="handleRebalance" class="btn btn-secondary btn-sm" :disabled="rebalancing">
+                {{ rebalancing ? 'Rebalancing...' : 'Rebalance Weights' }}
+              </button>
+            </div>
             <div class="expected-sales-grid">
               <div v-for="item in bundle.items" :key="item.id" class="expected-item-card">
                 <div class="expected-item-header">
@@ -104,7 +116,7 @@
                 <div class="expected-item-details">
                   <div class="detail-row">
                     <span class="label">Cost:</span>
-                    <span class="value">${{ stats.costPerItem.toFixed(2) }}</span>
+                    <span class="value">${{ getItemCost(item).toFixed(2) }}</span>
                   </div>
                   <div class="detail-row" v-if="getItemAdditionalCosts(item) > 0">
                     <span class="label">Additional Costs:</span>
@@ -113,7 +125,7 @@
                   <div class="detail-row">
                     <span class="label">{{ item.status === 'sold' ? 'Sale:' : 'Expected Sale:' }}</span>
                     <input 
-                      v-if="item.status === 'owned'"
+                      v-if="item.status !== 'sold'"
                       type="number" 
                       step="0.01"
                       :value="item.expectedSalePrice"
@@ -216,7 +228,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useBundleStore } from '@/stores/bundle'
 import { useItemStore } from '@/stores/item'
@@ -230,6 +242,24 @@ const itemStore = useItemStore()
 const bundle = ref(null)
 const stats = ref(null)
 const loading = ref(true)
+const rebalancing = ref(false)
+
+const isRebalanced = computed(() => {
+  if (!bundle.value?.items) return false
+  return bundle.value.items.some(item => item.purchasePrice != null && parseFloat(item.purchasePrice) > 0)
+})
+
+const handleRebalance = async () => {
+  try {
+    rebalancing.value = true
+    bundle.value = await bundleStore.rebalanceBundle(route.params.id)
+    stats.value = await bundleStore.getBundleStats(route.params.id)
+  } catch (error) {
+    alert(error.response?.data?.error || 'Failed to rebalance bundle')
+  } finally {
+    rebalancing.value = false
+  }
+}
 
 const updateExpectedPrice = async (itemId, value) => {
   try {
@@ -284,9 +314,16 @@ const calculateExpectedMargin = () => {
   return ((profit / revenue) * 100).toFixed(1)
 }
 
+const getItemCost = (item) => {
+  // Use item-level purchasePrice if set (e.g. after rebalancing), otherwise fall back to uniform cost
+  if (item.purchasePrice != null && parseFloat(item.purchasePrice) > 0) {
+    return parseFloat(item.purchasePrice)
+  }
+  return stats.value ? stats.value.costPerItem : 0
+}
+
 const calculateItemProfit = (item) => {
-  if (!stats.value) return 0
-  const costPerItem = stats.value.costPerItem
+  const costPerItem = getItemCost(item)
   const additionalCosts = getItemAdditionalCosts(item)
   if (item.status === 'sold') {
     return (parseFloat(item.salePrice) || 0) - costPerItem - additionalCosts
@@ -550,6 +587,17 @@ dd {
   padding: 2rem;
   color: var(--text-secondary);
   font-style: italic;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-header h3 {
+  margin-bottom: 0;
 }
 
 .expected-sales-grid {
