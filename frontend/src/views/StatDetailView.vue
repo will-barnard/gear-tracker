@@ -140,7 +140,7 @@ const highlight = computed(() => {
     case 'listings':
       return { value: forSaleItems.value.filter(i => i.isListedOnline).length, label: 'Listed Online', format: 'number', color: 'default' }
     case 'projected-profit': {
-      const pp = forSaleItems.value.reduce((s, i) => s + (i.expectedSalePrice || 0) - i.effectiveCost, 0)
+      const pp = forSaleItems.value.reduce((s, i) => s + i.effectiveSalePrice - i.effectiveCost, 0)
       return { value: pp, label: 'Projected Profit', format: 'signed-currency', color: 'auto' }
     }
     default:
@@ -204,7 +204,7 @@ const extraHighlights = computed(() => {
       ]
     }
     case 'projected-profit': {
-      const expectedRev = forSaleItems.value.reduce((s, i) => s + (i.expectedSalePrice || 0), 0)
+      const expectedRev = sumField(forSaleItems.value, 'effectiveSalePrice')
       return [
         { value: expectedRev, label: 'Expected Revenue', format: 'currency', color: 'default' },
         { value: sumField(forSaleItems.value, 'effectiveCost'), label: 'Cost Basis', format: 'currency', color: 'default' }
@@ -326,7 +326,7 @@ const breakdownChartData = computed(() => {
     }
     case 'projected-profit':
       items = forSaleItems.value
-      valueFn = (i) => (i.expectedSalePrice || 0) - i.effectiveCost
+      valueFn = (i) => i.effectiveSalePrice - i.effectiveCost
       break
     default:
       return null
@@ -486,7 +486,7 @@ const enrichedTableItems = computed(() => {
   return tableItems.value.map(item => ({
     ...item,
     _profit: item.effectiveSalePrice - item.effectiveCost,
-    _projectedProfit: (item.expectedSalePrice || 0) - item.effectiveCost
+    _projectedProfit: item.effectiveSalePrice - item.effectiveCost
   }))
 })
 

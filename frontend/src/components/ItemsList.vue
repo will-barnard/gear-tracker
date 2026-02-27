@@ -185,24 +185,29 @@ const filters = ref({
 
 const categories = ref([])
 
+// Get the effective date for sorting: sell date (bundle or item) first, then buy date
+const getEffectiveDate = (item) => {
+  const saleDate = item.saleBundle?.saleDate || item.saleDate
+  const purchaseDate = item.purchaseBundle?.purchaseDate || item.purchaseDate
+  return saleDate || purchaseDate
+}
+
 // Computed property for display-sorted items
-// When sorting by purchaseDate, prioritize saleDate over purchaseDate
+// When sorting by purchaseDate, sort by effective sale date then purchase date (matching backend COALESCE)
 const displayItems = computed(() => {
   if (filters.value.sortBy !== 'purchaseDate') {
     return itemStore.items
   }
   
-  // Create a copy and sort by display date (saleDate if available, else purchaseDate)
   return [...itemStore.items].sort((a, b) => {
-    const dateA = a.saleDate || a.purchaseDate
-    const dateB = b.saleDate || b.purchaseDate
+    const dateA = getEffectiveDate(a)
+    const dateB = getEffectiveDate(b)
     
     // Handle null dates - items without dates go to the end
     if (!dateA && !dateB) return 0
     if (!dateA) return 1
     if (!dateB) return -1
     
-    // Sort descending (most recent first)
     if (filters.value.sortOrder === 'DESC') {
       return new Date(dateB) - new Date(dateA)
     } else {

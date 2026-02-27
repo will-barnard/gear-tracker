@@ -60,31 +60,30 @@ router.get('/', authMiddleware, async (req, res, next) => {
     
     const offset = (page - 1) * limit;
     
-    // Include purchase bundle for all queries to get bundle purchase dates
     const includeOptions = [
       { model: Category, as: 'category' },
-      { model: AdditionalCost, as: 'additionalCosts' }
+      { model: AdditionalCost, as: 'additionalCosts' },
+      { model: Bundle, as: 'purchaseBundle', attributes: ['id', 'name', 'purchaseDate'], required: false },
+      { model: Bundle, as: 'saleBundle', attributes: ['id', 'name', 'saleDate'], required: false }
     ];
     
-    // Add bundle if sorting by purchase date to get bundle's purchase date
+    // Sort by effective date: sell date (from bundle or item) first, then buy date if no sell date
+    // Cast all to DATE since Item uses timestamp and Bundle uses DATEONLY
+    const safeOrder = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+    let orderClause;
     if (sortBy === 'purchaseDate') {
-      includeOptions.push({ 
-        model: Bundle, 
-        as: 'purchaseBundle', 
-        attributes: ['id', 'name', 'purchaseDate'], 
-        required: false 
-      });
+      orderClause = [Sequelize.literal(`COALESCE((SELECT b.sale_date::date FROM bundles b WHERE b.id = "Item".sale_bundle_id), "Item".sale_date::date, (SELECT b.purchase_date::date FROM bundles b WHERE b.id = "Item".purchase_bundle_id), "Item".purchase_date::date) ${safeOrder} NULLS LAST`)];
+    } else {
+      orderClause = [[sortBy, safeOrder]];
     }
-    
-    // Handle purchaseDate sorting - use item's purchaseDate (items in bundles should have bundle's date copied)
-    const orderClause = [[sortBy, sortOrder]];
     
     const { count, rows } = await Item.findAndCountAll({
       where,
       include: includeOptions,
       order: orderClause,
       limit: parseInt(limit),
-      offset: parseInt(offset)
+      offset: parseInt(offset),
+      subQuery: false
     });
     
     res.json({
@@ -170,14 +169,19 @@ router.get('/stats/detail', authMiddleware, async (req, res, next) => {
       }, 0);
       effectiveCost += additionalCostTotal;
 
-      // Effective sale price (accounting for sell bundles)
+      // Effective sale price (accounting for sell bundles and for_sale status)
       let effectiveSalePrice = 0;
       if (plain.saleBundleId) {
+        // Item is in a sell bundle — allocate bundle sale price equally
         const bundlePrice = sellBundlePrices[plain.saleBundleId] || 0;
         const count = sellBundleItemCounts[plain.saleBundleId] || 1;
         effectiveSalePrice = bundlePrice / count;
-      } else {
+      } else if (plain.status === 'sold') {
+        // Sold individually — use actual sale price
         effectiveSalePrice = parseFloat(plain.salePrice || 0);
+      } else if (plain.status === 'for_sale') {
+        // For sale individually — use asking price (expectedSalePrice)
+        effectiveSalePrice = parseFloat(plain.expectedSalePrice || 0);
       }
 
       return {
@@ -428,14 +432,27 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       }
     });
     
-    // Add sell bundle revenues to sold items
+    // Add sell bundle revenues
     sellBundles.forEach(bundle => {
-      // Check if all items in the bundle are sold
       const bundleItems = items.filter(item => item.saleBundleId === bundle.id);
-      const allSold = bundleItems.length > 0 && bundleItems.every(item => item.status === 'sold');
-      
+      if (bundleItems.length === 0) return;
+
+      const allSold = bundleItems.every(item => item.status === 'sold');
+      const allForSale = bundleItems.every(item => item.status === 'for_sale');
+      const hasMixedStatuses = !allSold && !allForSale;
+
       if (allSold) {
+        // Completed sell bundle — count as sold revenue
         statsByStatus.sold.totalSalePrice += parseFloat(bundle.salePrice || 0);
+      } else if (allForSale) {
+        // Sell bundle still for sale — count as expected for_sale revenue
+        statsByStatus.for_sale.totalSalePrice += parseFloat(bundle.salePrice || 0);
+      } else if (hasMixedStatuses) {
+        // Mixed statuses — allocate proportionally per item
+        const pricePerItem = parseFloat(bundle.salePrice || 0) / bundleItems.length;
+        bundleItems.forEach(item => {
+          statsByStatus[item.status].totalSalePrice += pricePerItem;
+        });
       }
     });
     
