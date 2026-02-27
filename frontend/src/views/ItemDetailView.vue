@@ -50,9 +50,11 @@
             <dl>
               <dt v-if="item.purchaseBundleId">Cost Share (from bundle)</dt>
               <dt v-else>Purchase Price</dt>
-              <dd v-if="item.purchaseBundleId && purchaseBundleStats">
-                ${{ purchaseBundleStats.costPerItem.toFixed(2) }}
-                <span class="help-text">({{ item.purchaseBundle.name }})</span>
+              <dd v-if="item.purchaseBundleId && (item.purchasePrice || purchaseBundleStats)">
+                ${{ itemCost.toFixed(2) }}
+                <span class="help-text">
+                  ({{ item.purchaseBundle?.name }}<template v-if="item.purchasePrice && parseFloat(item.purchasePrice) > 0"> · rebalanced</template>)
+                </span>
               </dd>
               <dd v-else>{{ item.purchasePrice ? `$${parseFloat(item.purchasePrice).toFixed(2)}` : '-' }}</dd>
               <dt>Purchase Date</dt>
@@ -289,8 +291,14 @@ const totalAdditionalCosts = computed(() => {
 })
 
 const itemCost = computed(() => {
-  if (item.value?.purchaseBundleId && purchaseBundleStats.value) {
-    return purchaseBundleStats.value.costPerItem
+  if (item.value?.purchaseBundleId) {
+    // Use rebalanced per-item cost if set, otherwise fall back to uniform cost from bundle stats
+    if (item.value.purchasePrice != null && parseFloat(item.value.purchasePrice) > 0) {
+      return parseFloat(item.value.purchasePrice)
+    }
+    if (purchaseBundleStats.value) {
+      return purchaseBundleStats.value.costPerItem
+    }
   }
   return parseFloat(item.value?.purchasePrice || 0)
 })

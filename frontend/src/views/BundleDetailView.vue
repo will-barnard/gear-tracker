@@ -11,7 +11,7 @@
             <h2>{{ bundle.name }}</h2>
             <div class="badges">
               <span class="type-badge" :class="bundle.type">{{ bundle.type === 'buy' ? 'Buy Bundle' : 'Sell Bundle' }}</span>
-              <span class="status-badge" :class="bundle.status">{{ bundle.status }}</span>
+              <span class="status-badge" :class="bundle.status">{{ getStatusLabel(bundle.status) }}</span>
             </div>
           </div>
           <div class="header-actions">
@@ -111,7 +111,7 @@
                   <router-link :to="`/items/${item.id}`" class="expected-item-name">
                     {{ item.name }}
                   </router-link>
-                  <span class="status-badge" :class="item.status">{{ item.status }}</span>
+                  <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
                 </div>
                 <div class="expected-item-details">
                   <div class="detail-row">
@@ -199,7 +199,7 @@
                   <router-link :to="`/items/${item.id}`" class="item-name">
                     {{ item.name }}
                   </router-link>
-                  <span class="status-badge" :class="item.status">{{ item.status }}</span>
+                  <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
                 </div>
                 <div class="item-details">
                   <span v-if="item.salePrice" class="sale-price">
@@ -320,6 +320,17 @@ const getItemCost = (item) => {
     return parseFloat(item.purchasePrice)
   }
   return stats.value ? stats.value.costPerItem : 0
+}
+
+const getStatusLabel = (status) => {
+  const labels = {
+    'active': 'Active',
+    'complete': 'Complete',
+    'owned': 'Owned',
+    'for_sale': 'For Sale',
+    'sold': 'Sold'
+  }
+  return labels[status] || status
 }
 
 const calculateItemProfit = (item) => {
@@ -452,6 +463,11 @@ onMounted(async () => {
 .status-badge.owned {
   background: #DBEAFE;
   color: #1E40AF;
+}
+
+.status-badge.for_sale {
+  background: #FEF3C7;
+  color: #92400E;
 }
 
 .status-badge.sold {

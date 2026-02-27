@@ -14,7 +14,9 @@
             <span></span>
           </span>
         </button>
-        <h1>🎸 Gear Tracker</h1>
+        <router-link class="home-link"to="/" @click="closeMenu">
+          <h1>🎸 Gear Tracker</h1>
+        </router-link>
       </div>
       
       <div class="nav-links" :class="{ 'nav-open': isMenuOpen }">
@@ -133,6 +135,10 @@ const handleLogout = () => {
   background-color: var(--text-primary);
   border-radius: 2px;
   transition: all 0.3s ease;
+}
+
+.home-link {
+  text-decoration: none;
 }
 
 .nav-links {

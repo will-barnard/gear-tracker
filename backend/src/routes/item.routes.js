@@ -156,8 +156,13 @@ router.get('/stats/detail', authMiddleware, async (req, res, next) => {
       // Effective purchase cost
       let effectiveCost = 0;
       if (plain.purchaseBundleId && plain.purchaseBundle) {
-        const count = bundleItemCounts[plain.purchaseBundleId] || 1;
-        effectiveCost = parseFloat(plain.purchaseBundle.purchasePrice || 0) / count;
+        // Use item's own purchasePrice if rebalanced, otherwise divide evenly
+        if (plain.purchasePrice && parseFloat(plain.purchasePrice) > 0) {
+          effectiveCost = parseFloat(plain.purchasePrice);
+        } else {
+          const count = bundleItemCounts[plain.purchaseBundleId] || 1;
+          effectiveCost = parseFloat(plain.purchaseBundle.purchasePrice || 0) / count;
+        }
       } else {
         effectiveCost = parseFloat(plain.purchasePrice || 0);
       }
@@ -397,10 +402,14 @@ router.get('/stats/summary', authMiddleware, async (req, res, next) => {
       if (item.purchaseBundleId && item.purchaseBundle) {
         const bundleInfo = bundleItemCounts[item.purchaseBundleId];
         if (bundleInfo && bundleInfo.type === 'buy') {
-          // For buy bundles: allocate purchase cost across items
-          const bundlePrice = parseFloat(item.purchaseBundle.purchasePrice || 0);
-          const itemCount = bundleInfo.count || 1;
-          itemCost = bundlePrice / itemCount;
+          // Use item's own purchasePrice if rebalanced, otherwise divide evenly
+          if (item.purchasePrice && parseFloat(item.purchasePrice) > 0) {
+            itemCost = parseFloat(item.purchasePrice);
+          } else {
+            const bundlePrice = parseFloat(item.purchaseBundle.purchasePrice || 0);
+            const itemCount = bundleInfo.count || 1;
+            itemCost = bundlePrice / itemCount;
+          }
         } else {
           // Fallback to individual purchase price
           itemCost = parseFloat(item.purchasePrice || 0);
