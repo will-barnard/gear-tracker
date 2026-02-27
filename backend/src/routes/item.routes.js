@@ -101,6 +101,112 @@ router.get('/', authMiddleware, async (req, res, next) => {
   }
 });
 
+// Get detailed stats data for charts and stat detail views
+router.get('/stats/detail', authMiddleware, async (req, res, next) => {
+  try {
+    const { sequelize } = require('../models');
+
+    const items = await Item.findAll({
+      where: { userId: req.user.id },
+      include: [
+        { model: Category, as: 'category' },
+        { model: AdditionalCost, as: 'additionalCosts' },
+        { model: Bundle, as: 'purchaseBundle' },
+        { model: Bundle, as: 'saleBundle' }
+      ],
+      order: [['purchaseDate', 'ASC'], ['createdAt', 'ASC']]
+    });
+
+    // Get bundle item counts for buy-bundle cost allocation
+    const bundleItemCounts = {};
+    const bundleRows = await sequelize.query(`
+      SELECT b.id as bundle_id, COUNT(i.*) as item_count
+      FROM bundles b
+      LEFT JOIN items i ON i.purchase_bundle_id = b.id
+      WHERE b.user_id = :userId AND b.type = 'buy'
+      GROUP BY b.id
+    `, {
+      replacements: { userId: req.user.id },
+      type: sequelize.QueryTypes.SELECT
+    });
+    bundleRows.forEach(row => {
+      bundleItemCounts[row.bundle_id] = parseInt(row.item_count);
+    });
+
+    // Get sell bundle prices
+    const sellBundles = await Bundle.findAll({
+      where: { userId: req.user.id, type: 'sell', salePrice: { [Op.not]: null } }
+    });
+    const sellBundlePrices = {};
+    sellBundles.forEach(b => {
+      sellBundlePrices[b.id] = parseFloat(b.salePrice || 0);
+    });
+
+    // Count items per sell bundle for allocation
+    const sellBundleItemCounts = {};
+    items.forEach(item => {
+      if (item.saleBundleId) {
+        sellBundleItemCounts[item.saleBundleId] = (sellBundleItemCounts[item.saleBundleId] || 0) + 1;
+      }
+    });
+
+    // Enrich items with computed costs
+    const enrichedItems = items.map(item => {
+      const plain = item.toJSON();
+
+      // Effective purchase cost
+      let effectiveCost = 0;
+      if (plain.purchaseBundleId && plain.purchaseBundle) {
+        const count = bundleItemCounts[plain.purchaseBundleId] || 1;
+        effectiveCost = parseFloat(plain.purchaseBundle.purchasePrice || 0) / count;
+      } else {
+        effectiveCost = parseFloat(plain.purchasePrice || 0);
+      }
+
+      // Additional costs
+      const additionalCostTotal = (plain.additionalCosts || []).reduce((sum, cost) => {
+        const amount = parseFloat(cost.amount || 0);
+        return sum + (cost.type === 'income' ? -amount : amount);
+      }, 0);
+      effectiveCost += additionalCostTotal;
+
+      // Effective sale price (accounting for sell bundles)
+      let effectiveSalePrice = 0;
+      if (plain.saleBundleId) {
+        const bundlePrice = sellBundlePrices[plain.saleBundleId] || 0;
+        const count = sellBundleItemCounts[plain.saleBundleId] || 1;
+        effectiveSalePrice = bundlePrice / count;
+      } else {
+        effectiveSalePrice = parseFloat(plain.salePrice || 0);
+      }
+
+      return {
+        id: plain.id,
+        name: plain.name,
+        brand: plain.brand,
+        model: plain.model,
+        status: plain.status,
+        condition: plain.condition,
+        purchaseDate: plain.purchaseDate,
+        saleDate: plain.saleDate,
+        purchasePrice: parseFloat(plain.purchasePrice || 0),
+        salePrice: parseFloat(plain.salePrice || 0),
+        expectedSalePrice: parseFloat(plain.expectedSalePrice || 0),
+        isListedOnline: plain.isListedOnline || false,
+        category: plain.category ? { id: plain.category.id, name: plain.category.name } : null,
+        effectiveCost: Math.round(effectiveCost * 100) / 100,
+        additionalCostTotal: Math.round(additionalCostTotal * 100) / 100,
+        effectiveSalePrice: Math.round(effectiveSalePrice * 100) / 100,
+        createdAt: plain.createdAt
+      };
+    });
+
+    res.json({ items: enrichedItems });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single item
 router.get('/:id', authMiddleware, async (req, res, next) => {
   try {

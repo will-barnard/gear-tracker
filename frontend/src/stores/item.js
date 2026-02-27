@@ -58,6 +58,11 @@ export const useItemStore = defineStore('item', () => {
     const response = await api.get('/items/stats/summary')
     return response.data
   }
+
+  const getStatsDetail = async () => {
+    const response = await api.get('/items/stats/detail')
+    return response.data
+  }
   
   return {
     items,
@@ -69,6 +74,7 @@ export const useItemStore = defineStore('item', () => {
     createItem,
     updateItem,
     deleteItem,
-    getStats
+    getStats,
+    getStatsDetail
   }
 })

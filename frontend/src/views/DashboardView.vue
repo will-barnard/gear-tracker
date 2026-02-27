@@ -18,66 +18,66 @@
       
       <div v-else class="stats-grid">
         
-        <div class="stat-card card">
+        <router-link to="/stats/inventory" class="stat-card card stat-card-link">
           <h3><!-- Owned Items --></h3>
           <p class="stat-value">{{ ownedCount }}</p>
           <p class="stat-label">Current inventory items</p>
-        </div>
+        </router-link>
         
-        <div class="stat-card card">
+        <router-link to="/stats/collection-value" class="stat-card card stat-card-link">
           <h3><!-- Total Investment --></h3>
           <p class="stat-value">${{ totalInvestment.toFixed(2) }}</p>
           <p class="stat-label">Collection value</p>
-        </div>
+        </router-link>
         
-        <div class="stat-card card">
+        <router-link to="/stats/sales" class="stat-card card stat-card-link">
           <h3></h3>
           <p class="stat-value">{{ soldCount }}</p>
           <p class="stat-label">Completed sales</p>
-        </div>
+        </router-link>
         
-        <div class="stat-card card">
+        <router-link to="/stats/revenue" class="stat-card card stat-card-link">
           <h3></h3>
           <p class="stat-value">${{ totalRevenue.toFixed(2) }}</p>
           <p class="stat-label">From sales</p>
-        </div>
+        </router-link>
       </div>
       
-      <div v-if="!loading" class="profit-card card">
+      <router-link v-if="!loading" to="/stats/profit" class="profit-card card stat-card-link">
         <h3>Total Profit/Loss</h3>
         <p class="profit-value" :class="profit >= 0 ? 'positive' : 'negative'">
           {{ profit >= 0 ? '+' : '' }}${{ profit.toFixed(2) }}
         </p>
-      </div>
+      </router-link>
       
       <div v-if="!loading" class="for-sale-section">
         <h3 class="section-title">For Sale Inventory</h3>
         <div class="stats-grid">
-          <div class="stat-card card">
+          <router-link to="/stats/for-sale" class="stat-card card stat-card-link">
             <h3></h3>
             <p class="stat-value">{{ forSaleCount }}</p>
             <p class="stat-label">Items for Sale</p>
-          </div>
+          </router-link>
           
-          <div class="stat-card card">
+          <router-link to="/stats/for-sale-investment" class="stat-card card stat-card-link">
             <h3></h3>
             <p class="stat-value">${{ forSaleInvestment.toFixed(2) }}</p>
             <p class="stat-label">Cost basis</p>
-          </div>
+          </router-link>
           
-          <div class="stat-card card">
+          <router-link to="/stats/listings" class="stat-card card stat-card-link">
             <h3></h3>
             <p class="stat-value">{{ listedOnlineCount }}</p>
             <p class="stat-label">Active listings</p>
-          </div>
+          </router-link>
           
-          <div class="stat-card card">
+          <router-link to="/stats/projected-profit" class="stat-card card stat-card-link">
             <h3></h3>
             <p class="stat-value" :class="projectedProfit >= 0 ? 'positive' : 'negative'">
               {{ projectedProfit >= 0 ? '+' : '' }}${{ projectedProfit.toFixed(2) }}
             </p>
             <p class="stat-label">Projected Profit</p>
-          </div>
+          </router-link>
         </div>
       </div>
     </div>
@@ -221,6 +221,22 @@ onMounted(async () => {
 .stat-card {
   text-align: center;
   padding: 1.25rem 1rem;
+}
+
+.stat-card-link {
+  text-decoration: none;
+  display: block;
+  transition: transform 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+}
+
+.stat-card-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card-link:active {
+  transform: translateY(0);
 }
 
 @media (min-width: 640px) {
