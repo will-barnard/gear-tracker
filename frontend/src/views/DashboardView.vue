@@ -8,32 +8,36 @@
         <router-link to="/items/new" class="btn btn-primary">Quick Add Item</router-link>
       </div>
       
+      <h3 class="section-title">Music Gear</h3>
+
       <div v-if="loading" class="loading-container">
         <div class="spinner"></div>
         <p>Loading dashboard...</p>
       </div>
       
+      
       <div v-else class="stats-grid">
+        
         <div class="stat-card card">
-          <h3>Owned Items</h3>
+          <h3><!-- Owned Items --></h3>
           <p class="stat-value">{{ ownedCount }}</p>
-          <p class="stat-label">Current inventory</p>
+          <p class="stat-label">Current inventory items</p>
         </div>
         
         <div class="stat-card card">
-          <h3>Total Investment</h3>
+          <h3><!-- Total Investment --></h3>
           <p class="stat-value">${{ totalInvestment.toFixed(2) }}</p>
-          <p class="stat-label">Purchase + costs</p>
+          <p class="stat-label">Collection value</p>
         </div>
         
         <div class="stat-card card">
-          <h3>Items Sold</h3>
+          <h3></h3>
           <p class="stat-value">{{ soldCount }}</p>
           <p class="stat-label">Completed sales</p>
         </div>
         
         <div class="stat-card card">
-          <h3>Total Revenue</h3>
+          <h3></h3>
           <p class="stat-value">${{ totalRevenue.toFixed(2) }}</p>
           <p class="stat-label">From sales</p>
         </div>
@@ -50,29 +54,29 @@
         <h3 class="section-title">For Sale Inventory</h3>
         <div class="stats-grid">
           <div class="stat-card card">
-            <h3>Items for Sale</h3>
+            <h3></h3>
             <p class="stat-value">{{ forSaleCount }}</p>
-            <p class="stat-label">Marked for sale</p>
+            <p class="stat-label">Items for Sale</p>
           </div>
           
           <div class="stat-card card">
-            <h3>Investment Value</h3>
+            <h3></h3>
             <p class="stat-value">${{ forSaleInvestment.toFixed(2) }}</p>
-            <p class="stat-label">Total cost basis</p>
+            <p class="stat-label">Cost basis</p>
           </div>
           
           <div class="stat-card card">
-            <h3>Items Listed</h3>
+            <h3></h3>
             <p class="stat-value">{{ listedOnlineCount }}</p>
-            <p class="stat-label">Active marketplace listings</p>
+            <p class="stat-label">Active listings</p>
           </div>
           
           <div class="stat-card card">
-            <h3>Projected Profit</h3>
+            <h3></h3>
             <p class="stat-value" :class="projectedProfit >= 0 ? 'positive' : 'negative'">
               {{ projectedProfit >= 0 ? '+' : '' }}${{ projectedProfit.toFixed(2) }}
             </p>
-            <p class="stat-label">Based on expected prices</p>
+            <p class="stat-label">Projected Profit</p>
           </div>
         </div>
       </div>
