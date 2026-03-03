@@ -50,7 +50,7 @@
             <dl>
               <dt v-if="item.purchaseBundleId">Cost Share (from bundle)</dt>
               <dt v-else>Purchase Price</dt>
-              <dd v-if="item.purchaseBundleId && (item.purchasePrice || purchaseBundleStats)">
+              <dd v-if="item.purchaseBundleId && (item.purchasePrice || purchaseBundle)">
                 ${{ itemCost.toFixed(2) }}
                 <span class="help-text">
                   ({{ item.purchaseBundle?.name }}<template v-if="item.purchasePrice && parseFloat(item.purchasePrice) > 0"> · rebalanced</template>)
@@ -268,7 +268,7 @@ const itemStore = useItemStore()
 const bundleStore = useBundleStore()
 
 const item = ref(null)
-const purchaseBundleStats = ref(null)
+const purchaseBundle = ref(null)
 const loading = ref(true)
 const showAddCostModal = ref(false)
 const editingCost = ref(null)
@@ -292,12 +292,15 @@ const totalAdditionalCosts = computed(() => {
 
 const itemCost = computed(() => {
   if (item.value?.purchaseBundleId) {
-    // Use rebalanced per-item cost if set, otherwise fall back to uniform cost from bundle stats
+    // Use rebalanced per-item cost if set, otherwise calculate from bundle
     if (item.value.purchasePrice != null && parseFloat(item.value.purchasePrice) > 0) {
       return parseFloat(item.value.purchasePrice)
     }
-    if (purchaseBundleStats.value) {
-      return purchaseBundleStats.value.costPerItem
+    // Calculate uniform cost from bundle if no rebalanced cost
+    if (purchaseBundle.value) {
+      const bundlePrice = parseFloat(purchaseBundle.value.purchasePrice || 0)
+      const itemCount = purchaseBundle.value.items?.length || 1
+      return bundlePrice / itemCount
     }
   }
   return parseFloat(item.value?.purchasePrice || 0)
@@ -370,6 +373,9 @@ const saveCost = async () => {
     
     // Refresh item data
     item.value = await itemStore.fetchItem(route.params.id)
+    if (item.value.purchaseBundleId) {
+      purchaseBundle.value = await bundleStore.fetchBundle(item.value.purchaseBundleId)
+    }
     closeCostModal()
   } catch (error) {
     costError.value = error.response?.data?.error || 'Failed to save cost'
@@ -385,6 +391,9 @@ const deleteCost = async (costId) => {
     await api.delete(`/costs/${costId}`)
     // Refresh item data
     item.value = await itemStore.fetchItem(route.params.id)
+    if (item.value.purchaseBundleId) {
+      purchaseBundle.value = await bundleStore.fetchBundle(item.value.purchaseBundleId)
+    }
   } catch (error) {
     alert(error.response?.data?.error || 'Failed to delete cost')
   }
@@ -401,7 +410,7 @@ onMounted(async () => {
   try {
     item.value = await itemStore.fetchItem(route.params.id)
     if (item.value.purchaseBundleId) {
-      purchaseBundleStats.value = await bundleStore.getBundleStats(item.value.purchaseBundleId)
+      purchaseBundle.value = await bundleStore.fetchBundle(item.value.purchaseBundleId)
     }
   } finally {
     loading.value = false
