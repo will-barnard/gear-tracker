@@ -87,6 +87,12 @@ const router = createRouter({
       name: 'EditBundle',
       component: () => import('@/views/BundleFormView.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/settings',
+      name: 'Settings',
+      component: () => import('@/views/SettingsView.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })

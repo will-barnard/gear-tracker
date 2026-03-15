@@ -24,6 +24,7 @@ app.use('/api/items', require('./routes/item.routes'));
 app.use('/api/categories', require('./routes/category.routes'));
 app.use('/api/costs', require('./routes/cost.routes'));
 app.use('/api/bundles', require('./routes/bundle.routes'));
+app.use('/api/data', require('./routes/data.routes'));
 
 // Health check
 app.get('/health', (req, res) => {

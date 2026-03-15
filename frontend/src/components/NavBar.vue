@@ -25,7 +25,12 @@
         <router-link to="/for-sale" @click="closeMenu">For Sale</router-link>
         <router-link to="/bundles" @click="closeMenu">Bundles</router-link>
         <router-link to="/categories" @click="closeMenu">Categories</router-link>
-        <button @click="handleLogout" class="btn btn-secondary">Logout</button>
+        <div class="nav-bottom-actions">
+          <router-link to="/settings" @click="closeMenu" class="settings-link" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </router-link>
+          <button @click="handleLogout" class="btn btn-secondary">Logout</button>
+        </div>
       </div>
       
       <div 
@@ -188,10 +193,36 @@ const handleLogout = () => {
   font-weight: 600;
 }
 
-.nav-links .btn {
-  font-size: 1rem;
-  width: 100%;
+.nav-bottom-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
   margin-top: auto;
+}
+
+.nav-bottom-actions .btn {
+  font-size: 1rem;
+  flex: 1;
+}
+
+.settings-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 0.375rem;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.settings-link:hover {
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+.settings-link.router-link-active {
+  color: var(--primary-color);
 }
 
 .nav-overlay {
@@ -250,11 +281,20 @@ const handleLogout = () => {
     background-color: transparent;
   }
   
-  .nav-links .btn {
-    width: auto;
+  .nav-bottom-actions {
     margin-top: 0;
+    gap: 0.5rem;
+  }
+
+  .nav-bottom-actions .btn {
+    flex: initial;
     font-size: 0.875rem;
     padding: 0.5rem 0.75rem;
+  }
+
+  .settings-link {
+    width: 36px;
+    height: 36px;
   }
   
   .nav-overlay {
