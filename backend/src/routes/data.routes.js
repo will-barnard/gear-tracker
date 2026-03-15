@@ -9,16 +9,8 @@ router.get('/export', authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const categories = await Category.findAll({
-      where: { userId },
-      raw: true
-    });
-
-    const bundles = await Bundle.findAll({
-      where: { userId },
-      raw: true
-    });
-
+    const categories = await Category.findAll({ where: { userId } });
+    const bundles = await Bundle.findAll({ where: { userId } });
     const items = await Item.findAll({
       where: { userId },
       include: [{ model: AdditionalCost, as: 'additionalCosts' }]
@@ -27,12 +19,32 @@ router.get('/export', authMiddleware, async (req, res, next) => {
     const data = {
       version: 1,
       exportedAt: new Date().toISOString(),
-      categories: categories.map(({ id, user_id, created_at, updated_at, ...rest }) => rest),
-      bundles: bundles.map(({ id, user_id, created_at, updated_at, ...rest }) => rest),
+      categories: categories.map(c => {
+        const p = c.get({ plain: true });
+        return { name: p.name, description: p.description, color: p.color };
+      }),
+      bundles: bundles.map(b => {
+        const p = b.get({ plain: true });
+        const { id, userId: uid, createdAt, updatedAt, ...rest } = p;
+        return rest;
+      }),
       items: items.map(item => {
         const plain = item.get({ plain: true });
-        const costs = (plain.additionalCosts || []).map(({ id, itemId, item_id, created_at, updated_at, ...rest }) => rest);
-        const { id, userId: uid, categoryId, purchaseBundleId, saleBundleId, createdAt, updatedAt, additionalCosts, ...rest } = plain;
+        const costs = (plain.additionalCosts || []).map(c => ({
+          description: c.description,
+          amount: c.amount,
+          date: c.date,
+          type: c.type || 'expense',
+          category: c.category,
+          notes: c.notes
+        }));
+        const categoryId = plain.categoryId;
+        const purchaseBundleId = plain.purchaseBundleId;
+        const saleBundleId = plain.saleBundleId;
+        const { id, userId: uid, createdAt, updatedAt, additionalCosts: ac, ...rest } = plain;
+        delete rest.categoryId;
+        delete rest.purchaseBundleId;
+        delete rest.saleBundleId;
         return {
           ...rest,
           categoryName: categories.find(c => c.id === categoryId)?.name || null,
@@ -121,7 +133,15 @@ router.post('/import', authMiddleware, async (req, res, next) => {
 
         if (additionalCosts?.length) {
           for (const cost of additionalCosts) {
-            await AdditionalCost.create({ ...cost, itemId: item.id });
+            await AdditionalCost.create({
+              description: cost.description,
+              amount: cost.amount,
+              date: cost.date,
+              type: cost.type || 'expense',
+              category: cost.category || null,
+              notes: cost.notes || null,
+              itemId: item.id
+            });
             stats.additionalCosts++;
           }
         }
