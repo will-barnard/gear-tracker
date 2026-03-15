@@ -20,6 +20,7 @@
       </div>
       
       <div class="nav-links" :class="{ 'nav-open': isMenuOpen }">
+        foo
         <router-link to="/" @click="closeMenu">Dashboard</router-link>
         <router-link to="/items" @click="closeMenu">Items</router-link>
         <router-link to="/for-sale" @click="closeMenu">For Sale</router-link>
