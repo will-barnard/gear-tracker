@@ -42,8 +42,8 @@
         <div v-if="importResult" class="success-message">
           <strong>Import complete!</strong>
           <ul>
-            <li>{{ importResult.categories }} categories added</li>
-            <li>{{ importResult.bundles }} bundles added</li>
+            <li>{{ importResult.categories }} categories added<span v-if="importResult.categoriesSkipped">, {{ importResult.categoriesSkipped }} already existed</span></li>
+            <li>{{ importResult.bundles }} bundles added<span v-if="importResult.bundlesSkipped">, {{ importResult.bundlesSkipped }} already existed</span></li>
             <li>{{ importResult.items }} items added</li>
             <li>{{ importResult.additionalCosts }} additional costs added</li>
           </ul>

@@ -72,7 +72,7 @@ router.post('/import', authMiddleware, async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid export file format' });
     }
 
-    const stats = { categories: 0, bundles: 0, items: 0, additionalCosts: 0 };
+    const stats = { categories: 0, categoriesSkipped: 0, bundles: 0, bundlesSkipped: 0, items: 0, additionalCosts: 0 };
 
     // Import categories (skip duplicates by name)
     const categoryMap = {};
@@ -87,6 +87,8 @@ router.post('/import', authMiddleware, async (req, res, next) => {
           const created = await Category.create({ ...cat, userId });
           categoryMap[cat.name] = created.id;
           stats.categories++;
+        } else {
+          stats.categoriesSkipped++;
         }
       }
     }
@@ -105,6 +107,8 @@ router.post('/import', authMiddleware, async (req, res, next) => {
           const created = await Bundle.create({ ...bundle, userId });
           bundleMap[key] = created.id;
           stats.bundles++;
+        } else {
+          stats.bundlesSkipped++;
         }
       }
     }
