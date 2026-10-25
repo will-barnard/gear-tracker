@@ -1,145 +1,106 @@
 <template>
-  <div class="bundle-form-view">
+  <div>
     <NavBar />
-    
-    <div class="container">
-      <div class="form-header">
-        <h2>{{ isEdit ? 'Edit Bundle' : 'Add New Bundle' }}</h2>
-        <router-link to="/bundles" class="btn btn-secondary">Cancel</router-link>
-      </div>
-      
-      <form @submit.prevent="handleSubmit" class="bundle-form card">
-        <div class="form-section">
-          <h3>Basic Information</h3>
-          
+    <main class="page form-page">
+      <router-link :to="cancelTo" class="back-link"><AppIcon name="arrow-left" :size="15" /> {{ isEdit ? 'Back to bundle' : 'Cancel' }}</router-link>
+      <div class="page-header"><h2>{{ isEdit ? 'Edit bundle' : 'New bundle' }}</h2></div>
+
+      <form @submit.prevent="handleSubmit" class="bundle-form">
+        <section class="card">
           <div class="form-group">
-            <label class="form-label">Bundle Type *</label>
-            <select v-model="formData.type" class="form-input" required>
-              <option value="buy">Buy Bundle (purchased items to sell individually)</option>
-              <option value="sell">Sell Bundle (selling multiple items together)</option>
-            </select>
+            <label class="form-label">Type</label>
+            <div class="type-pick">
+              <button type="button" class="type-opt" :class="{ active: formData.type === 'buy' }" :disabled="lockType" @click="formData.type = 'buy'">
+                <strong>Bought together</strong>
+                <span>One price for several items. The cost is split across them.</span>
+              </button>
+              <button type="button" class="type-opt" :class="{ active: formData.type === 'sell' }" :disabled="lockType" @click="formData.type = 'sell'">
+                <strong>Sold together</strong>
+                <span>Several items going out for one price.</span>
+              </button>
+            </div>
+            <small v-if="lockType" class="form-hint">The type can't change while the bundle has items.</small>
           </div>
-          
           <div class="form-group">
-            <label class="form-label">Name *</label>
-            <input
-              v-model="formData.name"
-              type="text"
-              class="form-input"
-              required
-            />
+            <label class="form-label">Name</label>
+            <input v-model="formData.name" type="text" class="form-input" placeholder="e.g. Estate sale keys lot" required />
           </div>
-          
           <div class="form-group">
             <label class="form-label">Description</label>
-            <textarea
-              v-model="formData.description"
-              class="form-input"
-              rows="3"
-            ></textarea>
+            <textarea v-model="formData.description" class="form-input" rows="2"></textarea>
           </div>
-          
-          <div class="form-group">
-            <label class="form-label">Status</label>
-            <select v-model="formData.status" class="form-input">
-              <option value="active">Active</option>
-              <option value="complete">Complete</option>
-            </select>
-          </div>
-        </div>
-        
-        <div class="form-section" v-if="formData.type === 'buy'">
-          <h3>Purchase Details</h3>
-          
+        </section>
+
+        <section v-if="formData.type === 'buy'" class="card">
+          <h3>Purchase</h3>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Purchase Price</label>
-              <input
-                v-model="formData.purchasePrice"
-                type="number"
-                step="0.01"
-                class="form-input"
-              />
+              <label class="form-label">Price paid</label>
+              <div class="input-prefix"><span>$</span><input v-model="formData.purchasePrice" type="number" step="0.01" min="0" inputmode="decimal" class="form-input" /></div>
             </div>
-            
             <div class="form-group">
-              <label class="form-label">Purchase Date</label>
-              <input
-                v-model="formData.purchaseDate"
-                type="date"
-                class="form-input"
-              />
+              <label class="form-label">Date</label>
+              <input v-model="formData.purchaseDate" type="date" class="form-input" />
             </div>
           </div>
-          
           <div class="form-group">
-            <label class="form-label">Purchase Location</label>
-            <input
-              v-model="formData.purchaseLocation"
-              type="text"
-              class="form-input"
-            />
+            <label class="form-label">Bought from</label>
+            <input v-model="formData.purchaseLocation" type="text" class="form-input" />
           </div>
-        </div>
-        
-        <div class="form-section" v-if="formData.type === 'sell'">
-          <h3>Sale Details</h3>
-          
+        </section>
+
+        <section v-else class="card">
+          <h3>Sale</h3>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Sale Price</label>
-              <input
-                v-model="formData.salePrice"
-                type="number"
-                step="0.01"
-                class="form-input"
-              />
+              <label class="form-label">Sale price</label>
+              <div class="input-prefix"><span>$</span><input v-model="formData.salePrice" type="number" step="0.01" min="0" inputmode="decimal" class="form-input" /></div>
+              <small class="form-hint">Leave empty while it's still listed.</small>
             </div>
-            
             <div class="form-group">
-              <label class="form-label">Sale Date</label>
-              <input
-                v-model="formData.saleDate"
-                type="date"
-                class="form-input"
-              />
+              <label class="form-label">Date</label>
+              <input v-model="formData.saleDate" type="date" class="form-input" />
             </div>
           </div>
-          
-          <div class="form-group">
-            <label class="form-label">Sale Location</label>
-            <input
-              v-model="formData.saleLocation"
-              type="text"
-              class="form-input"
-            />
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Fees</label>
+              <div class="input-prefix"><span>$</span><input v-model="formData.saleFees" type="number" step="0.01" min="0" inputmode="decimal" class="form-input" /></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Shipping you paid</label>
+              <div class="input-prefix"><span>$</span><input v-model="formData.saleShipping" type="number" step="0.01" min="0" inputmode="decimal" class="form-input" /></div>
+            </div>
           </div>
-        </div>
-        
-        <div class="form-section">
-          <h3>Additional Information</h3>
-          
           <div class="form-group">
-            <label class="form-label">Notes</label>
-            <textarea
-              v-model="formData.notes"
-              class="form-input"
-              rows="3"
-            ></textarea>
+            <label class="form-label">Sold on / to</label>
+            <input v-model="formData.saleLocation" type="text" class="form-input" list="platforms" />
+            <datalist id="platforms"><option v-for="p in PLATFORMS" :key="p">{{ p }}</option></datalist>
           </div>
-        </div>
-        
-        <div v-if="error" class="error-message">
-          {{ error }}
-        </div>
-        
+        </section>
+
+        <section class="card">
+          <h3>Status &amp; notes</h3>
+          <div class="form-group">
+            <div class="segmented">
+              <button type="button" :class="{ active: formData.status === 'active' }" @click="formData.status = 'active'">Active</button>
+              <button type="button" :class="{ active: formData.status === 'complete' }" @click="formData.status = 'complete'">Complete</button>
+            </div>
+            <small class="form-hint">Complete bundles drop out of the bundle pickers on the item form.</small>
+          </div>
+          <textarea v-model="formData.notes" class="form-input" rows="3" placeholder="Notes"></textarea>
+        </section>
+
+        <div v-if="error" class="alert alert-error">{{ error }}</div>
+
         <div class="form-actions">
+          <router-link :to="cancelTo" class="btn btn-secondary">Cancel</router-link>
           <button type="submit" class="btn btn-primary" :disabled="loading">
-            {{ loading ? 'Saving...' : (isEdit ? 'Update Bundle' : 'Create Bundle') }}
+            {{ loading ? 'Saving…' : (isEdit ? 'Save changes' : 'Create bundle') }}
           </button>
         </div>
       </form>
-    </div>
+    </main>
   </div>
 </template>
 
@@ -148,12 +109,16 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useBundleStore } from '@/stores/bundle'
 import NavBar from '@/components/NavBar.vue'
+import AppIcon from '@/components/AppIcon.vue'
+import { errorMessage, PLATFORMS } from '@/utils/format'
 
 const router = useRouter()
 const route = useRoute()
 const bundleStore = useBundleStore()
 
 const isEdit = computed(() => route.name === 'EditBundle')
+const cancelTo = computed(() => (isEdit.value ? `/bundles/${route.params.id}` : '/bundles'))
+const lockType = ref(false)
 
 const formData = ref({
   type: 'buy',
@@ -166,6 +131,8 @@ const formData = ref({
   salePrice: '',
   saleDate: '',
   saleLocation: '',
+  saleFees: '',
+  saleShipping: '',
   notes: ''
 })
 
@@ -175,141 +142,54 @@ const loading = ref(false)
 const handleSubmit = async () => {
   error.value = ''
   loading.value = true
-  
   try {
     const data = { ...formData.value }
-    // Convert empty strings to null for optional fields
-    Object.keys(data).forEach(key => {
-      if (data[key] === '') data[key] = null
-    })
-    
-    if (isEdit.value) {
-      await bundleStore.updateBundle(route.params.id, data)
-    } else {
-      await bundleStore.createBundle(data)
-    }
-    
-    router.push('/bundles')
+    Object.keys(data).forEach((key) => { if (data[key] === '') data[key] = null })
+    const saved = isEdit.value
+      ? await bundleStore.updateBundle(route.params.id, data)
+      : await bundleStore.createBundle(data)
+    router.replace(`/bundles/${saved.id}`)
   } catch (err) {
-    error.value = err.response?.data?.error || 'Failed to save bundle'
+    error.value = errorMessage(err, 'Failed to save bundle')
   } finally {
     loading.value = false
   }
 }
 
 onMounted(async () => {
-  if (isEdit.value) {
+  if (!isEdit.value) return
+  try {
     const bundle = await bundleStore.fetchBundle(route.params.id)
-    Object.keys(formData.value).forEach(key => {
-      if (bundle[key] !== null && bundle[key] !== undefined) {
-        formData.value[key] = bundle[key]
-      }
+    lockType.value = (bundle.items?.length || 0) > 0
+    Object.keys(formData.value).forEach((key) => {
+      if (bundle[key] !== null && bundle[key] !== undefined) formData.value[key] = bundle[key]
     })
-    // Format dates
-    if (bundle.purchaseDate) {
-      formData.value.purchaseDate = bundle.purchaseDate.split('T')[0]
-    }
-    if (bundle.saleDate) {
-      formData.value.saleDate = bundle.saleDate.split('T')[0]
-    }
+  } catch (err) {
+    error.value = errorMessage(err, "Couldn't load the bundle")
   }
 })
 </script>
 
 <style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
+.form-page { max-width: 820px; }
+.bundle-form { display: grid; gap: 1rem; }
+.type-pick { display: grid; gap: 0.5rem; }
+@media (min-width: 560px) { .type-pick { grid-template-columns: 1fr 1fr; } }
+.type-opt {
+  text-align: left; padding: 0.85rem 0.95rem; cursor: pointer;
+  border: 1.5px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--surface); display: flex; flex-direction: column; gap: 0.25rem;
 }
-
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
-
-.form-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.form-header h2 {
-  font-size: 1.5rem;
-}
-
-@media (min-width: 769px) {
-  .form-header {
-    margin-bottom: 2rem;
-  }
-}
-
-.bundle-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-@media (min-width: 769px) {
-  .bundle-form {
-    gap: 2rem;
-  }
-}
-
-.form-section h3 {
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-  font-size: 1.0625rem;
-}
-
-@media (min-width: 769px) {
-  .form-section h3 {
-    font-size: 1.125rem;
-  }
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-
-@media (min-width: 640px) {
-  .form-row {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
+.type-opt span { font-size: 0.8125rem; color: var(--text-muted); }
+.type-opt.active { border-color: var(--primary); background: var(--primary-soft); }
+.type-opt.active strong { color: var(--primary-on-soft); }
+.type-opt:disabled { cursor: not-allowed; opacity: 0.6; }
+.type-opt.active:disabled { opacity: 1; }
 .form-actions {
-  display: flex;
-  gap: 1rem;
-  flex-direction: column;
+  display: flex; gap: 0.75rem; justify-content: flex-end;
+  position: sticky; bottom: 0;
+  padding: 0.75rem 0 calc(0.75rem + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--bg) 30%);
 }
-
-@media (min-width: 640px) {
-  .form-actions {
-    flex-direction: row;
-  }
-}
-
-.form-actions .btn {
-  flex: 1;
-}
-
-.error-message {
-  padding: 0.75rem;
-  background-color: #FEE2E2;
-  color: #DC2626;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-}
-
-textarea.form-input {
-  resize: vertical;
-  font-family: inherit;
-}
+@media (max-width: 640px) { .form-actions .btn { flex: 1; } }
 </style>

@@ -2,6 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# pg_dump for the nightly backup to brew-bucket (services/backup.js).
+# Major version matches the postgres:16 service.
+RUN apk add --no-cache postgresql16-client
+
 # Copy package files
 COPY package*.json ./
 

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import api from '@/services/api'
+import { errorMessage } from '@/utils/format'
 
 export const useBundleStore = defineStore('bundle', {
   state: () => ({
@@ -15,108 +16,78 @@ export const useBundleStore = defineStore('bundle', {
   },
 
   actions: {
-    async fetchBundles() {
-      this.loading = true
+    async run(fn, fallback) {
       this.error = null
       try {
-        const response = await api.get('/bundles')
-        this.bundles = response.data
-        return response.data
+        return await fn()
       } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to fetch bundles'
+        this.error = errorMessage(error, fallback)
         throw error
+      }
+    },
+
+    async fetchBundles() {
+      this.loading = true
+      try {
+        return await this.run(async () => {
+          const response = await api.get('/bundles')
+          this.bundles = response.data
+          return response.data
+        }, 'Failed to fetch bundles')
       } finally {
         this.loading = false
       }
     },
 
+    // Detail includes items (with costing), stats and attachments.
     async fetchBundle(id) {
-      this.loading = true
-      this.error = null
-      try {
+      return this.run(async () => {
         const response = await api.get(`/bundles/${id}`)
         this.currentBundle = response.data
         return response.data
-      } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to fetch bundle'
-        throw error
-      } finally {
-        this.loading = false
-      }
+      }, 'Failed to fetch bundle')
     },
 
     async createBundle(bundleData) {
-      this.loading = true
-      this.error = null
-      try {
+      return this.run(async () => {
         const response = await api.post('/bundles', bundleData)
         this.bundles.unshift(response.data)
         return response.data
-      } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to create bundle'
-        throw error
-      } finally {
-        this.loading = false
-      }
+      }, 'Failed to create bundle')
     },
 
     async updateBundle(id, bundleData) {
-      this.loading = true
-      this.error = null
-      try {
+      return this.run(async () => {
         const response = await api.put(`/bundles/${id}`, bundleData)
         const index = this.bundles.findIndex(b => b.id === id)
-        if (index !== -1) {
-          this.bundles[index] = response.data
-        }
-        if (this.currentBundle?.id === id) {
-          this.currentBundle = response.data
-        }
+        if (index !== -1) this.bundles[index] = { ...this.bundles[index], ...response.data }
+        if (this.currentBundle?.id === id) this.currentBundle = response.data
         return response.data
-      } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to update bundle'
-        throw error
-      } finally {
-        this.loading = false
-      }
+      }, 'Failed to update bundle')
     },
 
     async deleteBundle(id) {
-      this.loading = true
-      this.error = null
-      try {
+      return this.run(async () => {
         await api.delete(`/bundles/${id}`)
         this.bundles = this.bundles.filter(b => b.id !== id)
-        if (this.currentBundle?.id === id) {
-          this.currentBundle = null
-        }
-      } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to delete bundle'
-        throw error
-      } finally {
-        this.loading = false
-      }
-    },
-
-    async getBundleStats(id) {
-      try {
-        const response = await api.get(`/bundles/${id}/stats`)
-        return response.data
-      } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to fetch bundle stats'
-        throw error
-      }
+        if (this.currentBundle?.id === id) this.currentBundle = null
+      }, 'Failed to delete bundle')
     },
 
     async rebalanceBundle(id) {
-      try {
+      return this.run(async () => {
         const response = await api.post(`/bundles/${id}/rebalance`)
         this.currentBundle = response.data
         return response.data
-      } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to rebalance bundle'
-        throw error
-      }
+      }, 'Failed to rebalance bundle')
+    },
+
+    async resetBalance(id) {
+      return this.run(async () => {
+        const response = await api.delete(`/bundles/${id}/rebalance`)
+        this.currentBundle = response.data
+        return response.data
+      }, 'Failed to reset bundle split')
     }
   }
 })

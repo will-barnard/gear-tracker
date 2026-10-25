@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const authMiddleware = require('../middleware/auth.middleware');
 const { Category } = require('../models');
+const { pick, CATEGORY_FIELDS } = require('../services/fields');
 
 const router = express.Router();
 
@@ -52,7 +53,7 @@ router.post('/',
   async (req, res, next) => {
     try {
       const category = await Category.create({
-        ...req.body,
+        ...pick(req.body, CATEGORY_FIELDS),
         userId: req.user.id
       });
       
@@ -77,7 +78,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
       return res.status(404).json({ error: 'Category not found' });
     }
     
-    await category.update(req.body);
+    await category.update(pick(req.body, CATEGORY_FIELDS));
     res.json(category);
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {

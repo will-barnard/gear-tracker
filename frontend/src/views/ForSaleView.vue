@@ -1,14 +1,13 @@
 <template>
-  <div class="for-sale-view">
+  <div>
     <NavBar />
-    
-    <div class="container">
-      <ItemsList 
-        title="🏷️ For Sale" 
+    <main class="page">
+      <ItemsList
+        title="For sale"
         filter-by-status="for_sale"
-        empty-message="No items for sale. Items with 'For Sale' status will appear here."
+        empty-message="Nothing for sale. Set an item's status to For sale and it shows up here."
       />
-    </div>
+    </main>
   </div>
 </template>
 
@@ -16,17 +15,3 @@
 import NavBar from '@/components/NavBar.vue'
 import ItemsList from '@/components/ItemsList.vue'
 </script>
-
-<style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
-}
-
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
-</style>

@@ -29,6 +29,7 @@ db.Item = require('./item.model')(sequelize, Sequelize);
 db.Category = require('./category.model')(sequelize, Sequelize);
 db.AdditionalCost = require('./additional-cost.model')(sequelize, Sequelize);
 db.Bundle = require('./bundle.model')(sequelize, Sequelize);
+db.Attachment = require('./attachment.model')(sequelize, Sequelize);
 
 // Define associations
 db.User.hasMany(db.Item, { foreignKey: 'userId', as: 'items' });
@@ -51,5 +52,11 @@ db.Category.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
 
 db.User.hasMany(db.Bundle, { foreignKey: 'userId', as: 'bundles' });
 db.Bundle.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
+
+db.Item.hasMany(db.Attachment, { foreignKey: 'itemId', as: 'attachments' });
+db.Attachment.belongsTo(db.Item, { foreignKey: 'itemId', as: 'item' });
+
+db.Bundle.hasMany(db.Attachment, { foreignKey: 'bundleId', as: 'attachments' });
+db.Attachment.belongsTo(db.Bundle, { foreignKey: 'bundleId', as: 'bundle' });
 
 module.exports = db;

@@ -51,6 +51,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    saleFees: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    saleShipping: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
     status: {
       type: DataTypes.ENUM('active', 'complete'),
       defaultValue: 'active'
@@ -65,16 +73,6 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true
   });
 
-  Bundle.associate = (models) => {
-    Bundle.belongsTo(models.User, {
-      foreignKey: 'userId',
-      as: 'user'
-    });
-    Bundle.hasMany(models.Item, {
-      foreignKey: 'bundleId',
-      as: 'items'
-    });
-  };
 
   return Bundle;
 };

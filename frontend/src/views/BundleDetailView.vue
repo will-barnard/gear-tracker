@@ -1,238 +1,207 @@
 <template>
-  <div class="bundle-detail-view">
+  <div>
     <NavBar />
-    
-    <div class="container">
-      <div v-if="loading" class="loading">Loading...</div>
-      
-      <div v-else-if="bundle">
-        <div class="detail-header">
-          <div>
-            <h2>{{ bundle.name }}</h2>
-            <div class="badges">
-              <span class="type-badge" :class="bundle.type">{{ bundle.type === 'buy' ? 'Buy Bundle' : 'Sell Bundle' }}</span>
-              <span class="status-badge" :class="bundle.status">{{ getStatusLabel(bundle.status) }}</span>
-            </div>
-          </div>
-          <div class="header-actions">
-            <router-link :to="`/bundles/${bundle.id}/edit`" class="btn btn-primary">Edit</router-link>
-            <button @click="handleDelete" class="btn btn-danger">Delete</button>
-          </div>
-        </div>
-        
-        <div class="detail-grid">
-          <div class="detail-card card" v-if="bundle.type === 'buy'">
-            <h3>Purchase Information</h3>
-            <dl>
-              <dt>Purchase Price</dt>
-              <dd>${{ bundle.purchasePrice ? parseFloat(bundle.purchasePrice).toFixed(2) : '0.00' }}</dd>
-              
-              <dt>Purchase Date</dt>
-              <dd>{{ bundle.purchaseDate ? new Date(bundle.purchaseDate).toLocaleDateString() : 'Not set' }}</dd>
-              
-              <dt>Purchase Location</dt>
-              <dd>{{ bundle.purchaseLocation || 'Not set' }}</dd>
-            </dl>
-          </div>
-          
-          <div class="detail-card card" v-if="bundle.type === 'sell'">
-            <h3>Sale Information</h3>
-            <dl>
-              <dt>Sale Price</dt>
-              <dd>${{ bundle.salePrice ? parseFloat(bundle.salePrice).toFixed(2) : '0.00' }}</dd>
-              
-              <dt>Sale Date</dt>
-              <dd>{{ bundle.saleDate ? new Date(bundle.saleDate).toLocaleDateString() : 'Not set' }}</dd>
-              
-              <dt>Sale Location</dt>
-              <dd>{{ bundle.saleLocation || 'Not set' }}</dd>
-            </dl>
-          </div>
-          
-          <div class="detail-card card" v-if="stats">
-            <h3>Statistics</h3>
-            <dl>
-              <dt>Total Items</dt>
-              <dd>{{ stats.totalItems }}</dd>
-              
-              <dt>Owned</dt>
-              <dd>{{ stats.ownedItems }}</dd>
-              
-              <dt>Sold</dt>
-              <dd>{{ stats.soldItems }}</dd>
-              
-              <template v-if="bundle.type === 'buy'">
-                <template v-if="isRebalanced">
-                  <dt>Total Cost Basis</dt>
-                  <dd>${{ parseFloat(bundle.purchasePrice || 0).toFixed(2) }}</dd>
-                  <dd style="grid-column: 1 / -1; font-size: 0.75rem; color: var(--text-secondary); font-style: italic; margin-top: -0.25rem;">Rebalanced by weight</dd>
-                </template>
-                <template v-else>
-                  <dt>Cost Per Item</dt>
-                  <dd>${{ stats.costPerItem.toFixed(2) }}</dd>
-                </template>
-                
-                <dt>Total Revenue</dt>
-                <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
-                
-                <dt>Additional Costs</dt>
-                <dd>${{ stats.totalAdditionalCosts.toFixed(2) }}</dd>
-              </template>
-              
-              <template v-if="bundle.type === 'sell'">
-                <dt>Total Item Cost</dt>
-                <dd>${{ stats.totalCost.toFixed(2) }}</dd>
-                
-                <dt>Bundle Sale Price</dt>
-                <dd>${{ stats.totalRevenue.toFixed(2) }}</dd>
-                
-                <dt>Additional Costs</dt>
-                <dd>${{ stats.totalAdditionalCosts.toFixed(2) }}</dd>
-              </template>
-              
-              <dt>Total Profit</dt>
-              <dd :class="stats.totalProfit >= 0 ? 'profit' : 'loss'">
-                {{ stats.totalProfit >= 0 ? '+' : '' }}${{ stats.totalProfit.toFixed(2) }}
-              </dd>
-            </dl>
-          </div>
-          
-          <!-- Expected Sales Section (Buy Bundles Only) -->
-          <div v-if="bundle.type === 'buy'" class="detail-card card full-width">
-            <div class="section-header">
-              <h3>Expected Sales & Profit Estimation</h3>
-              <button @click="handleRebalance" class="btn btn-secondary btn-sm" :disabled="rebalancing">
-                {{ rebalancing ? 'Rebalancing...' : 'Rebalance Weights' }}
-              </button>
-            </div>
-            <div class="expected-sales-grid">
-              <div v-for="item in bundle.items" :key="item.id" class="expected-item-card">
-                <div class="expected-item-header">
-                  <router-link :to="`/items/${item.id}`" class="expected-item-name">
-                    {{ item.name }}
-                  </router-link>
-                  <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
-                </div>
-                <div class="expected-item-details">
-                  <div class="detail-row">
-                    <span class="label">Cost:</span>
-                    <span class="value">${{ getItemCost(item).toFixed(2) }}</span>
-                  </div>
-                  <div class="detail-row" v-if="getItemAdditionalCosts(item) > 0">
-                    <span class="label">Additional Costs:</span>
-                    <span class="value">${{ getItemAdditionalCosts(item).toFixed(2) }}</span>
-                  </div>
-                  <div class="detail-row">
-                    <span class="label">{{ item.status === 'sold' ? 'Sale:' : 'Expected Sale:' }}</span>
-                    <input 
-                      v-if="item.status !== 'sold'"
-                      type="number" 
-                      step="0.01"
-                      :value="item.expectedSalePrice"
-                      @blur="updateExpectedPrice(item.id, $event.target.value)"
-                      class="expected-price-input"
-                      placeholder="0.00"
-                    />
-                    <span v-else class="value">
-                      {{ item.salePrice ? `$${parseFloat(item.salePrice).toFixed(2)}` : '-' }}
-                    </span>
-                  </div>
-                  <div v-if="item.expectedSalePrice || item.salePrice" class="detail-row profit-row">
-                    <span class="label">{{ item.status === 'sold' ? 'Profit:' : 'Expected Profit:' }}</span>
-                    <span class="value" :class="calculateItemProfit(item) >= 0 ? 'profit-positive' : 'profit-negative'">
-                      {{ formatProfit(calculateItemProfit(item)) }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+    <main class="page">
+      <div v-if="loading" class="loading-block"><div class="spinner"></div>Loading…</div>
 
-            <!-- Total Expected Summary -->
-            <div class="expected-summary">
-              <h4>Total Expected Performance</h4>
-              <div class="summary-stats">
-                <div class="stat-item">
-                  <span class="stat-label">Total Cost:</span>
-                  <span class="stat-value">${{ parseFloat(bundle.purchasePrice || 0).toFixed(2) }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Additional Costs:</span>
-                  <span class="stat-value">${{ getTotalAdditionalCosts().toFixed(2) }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Expected Revenue:</span>
-                  <span class="stat-value">${{ calculateExpectedRevenue().toFixed(2) }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Expected Profit:</span>
-                  <span class="stat-value" :class="calculateExpectedProfit() >= 0 ? 'profit-positive' : 'profit-negative'">
-                    {{ calculateExpectedProfit() >= 0 ? '+' : '' }}${{ calculateExpectedProfit().toFixed(2) }}
-                  </span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Expected Margin:</span>
-                  <span class="stat-value">{{ calculateExpectedMargin() }}%</span>
-                </div>
+      <div v-else-if="!bundle" class="empty-state card">
+        <p>That bundle doesn't exist (or was deleted).</p>
+        <router-link to="/bundles" class="btn btn-secondary" style="margin-top: 1rem">Back to bundles</router-link>
+      </div>
+
+      <template v-else>
+        <router-link to="/bundles" class="back-link"><AppIcon name="arrow-left" :size="15" /> Bundles</router-link>
+
+        <header class="page-header">
+          <div>
+            <div class="badges">
+              <span class="badge" :class="bundle.type">{{ bundle.type === 'buy' ? 'Buy bundle' : 'Sell bundle' }}</span>
+              <span class="badge" :class="bundle.status">{{ bundle.status === 'complete' ? 'Complete' : 'Active' }}</span>
+            </div>
+            <h2 class="title">{{ bundle.name }}</h2>
+            <p class="sub">
+              <template v-if="bundle.type === 'buy'">{{ money(bundle.purchasePrice) }}<template v-if="bundle.purchaseDate"> · {{ date(bundle.purchaseDate) }}</template><template v-if="bundle.purchaseLocation"> · {{ bundle.purchaseLocation }}</template></template>
+              <template v-else>{{ bundle.salePrice != null ? money(bundle.salePrice) : 'No price yet' }}<template v-if="bundle.saleDate"> · {{ date(bundle.saleDate) }}</template><template v-if="bundle.saleLocation"> · {{ bundle.saleLocation }}</template></template>
+            </p>
+          </div>
+          <div class="page-actions">
+            <button v-if="stats.isComplete && bundle.status !== 'complete'" class="btn btn-secondary" @click="setStatus('complete')">
+              <AppIcon name="check" :size="15" /> Mark complete
+            </button>
+            <router-link :to="`/bundles/${bundle.id}/edit`" class="btn btn-primary"><AppIcon name="edit" :size="15" /> Edit</router-link>
+            <button @click="handleDelete" class="btn btn-danger btn-icon" title="Delete bundle" aria-label="Delete bundle"><AppIcon name="trash" :size="16" /></button>
+          </div>
+        </header>
+
+        <!-- Summary -->
+        <div class="stats-grid">
+          <template v-if="bundle.type === 'buy'">
+            <div class="card stat-tile">
+              <div class="label">Paid</div>
+              <div class="value">{{ money(stats.purchasePrice, { whole: true }) }}</div>
+              <div class="hint">{{ stats.totalItems }} item{{ stats.totalItems === 1 ? '' : 's' }}<template v-if="stats.totalAdditionalCosts"> · {{ signedMoney(stats.totalAdditionalCosts, { whole: true }) }} extra costs</template></div>
+            </div>
+            <div class="card stat-tile">
+              <div class="label">Recovered</div>
+              <div class="value">{{ money(stats.realizedRevenue, { whole: true }) }}</div>
+              <div class="hint">{{ stats.soldItems }} of {{ stats.totalItems }} sold<template v-if="stats.recoveredPct != null"> · {{ stats.recoveredPct }}% of cost</template></div>
+              <div class="meter" :title="`${stats.recoveredPct || 0}% of total cost recovered`"><div :style="{ width: Math.min(stats.recoveredPct || 0, 100) + '%' }"></div></div>
+            </div>
+            <div class="card stat-tile">
+              <div class="label">Realized profit</div>
+              <div class="value" :class="tone(stats.realizedProfit)">{{ signedMoney(stats.realizedProfit, { whole: true }) }}</div>
+              <div class="hint">On items sold so far</div>
+            </div>
+            <div class="card stat-tile">
+              <div class="label">Projected profit</div>
+              <div class="value" :class="tone(stats.expectedProfit)">{{ signedMoney(stats.expectedProfit, { whole: true }) }}</div>
+              <div class="hint">
+                <template v-if="stats.expectedMargin != null">{{ stats.expectedMargin }}% margin</template>
+                <template v-if="stats.unpricedItems"> · {{ stats.unpricedItems }} without a price</template>
               </div>
             </div>
-          </div>
-          
-          <div v-if="bundle.description" class="detail-card card full-width">
-            <h3>Description</h3>
-            <p>{{ bundle.description }}</p>
-          </div>
-          
-          <div v-if="bundle.notes" class="detail-card card full-width">
-            <h3>Notes</h3>
-            <p>{{ bundle.notes }}</p>
-          </div>
-          
-          <div class="detail-card card full-width">
-            <div class="items-header">
-              <h3>Items in Bundle</h3>
-              <router-link to="/items/new" class="btn btn-primary btn-sm">Add Item</router-link>
+          </template>
+          <template v-else>
+            <div class="card stat-tile">
+              <div class="label">Sale price</div>
+              <div class="value">{{ money(stats.grossSale, { whole: true }) }}</div>
+              <div class="hint">{{ stats.totalItems }} item{{ stats.totalItems === 1 ? '' : 's' }}</div>
             </div>
-            
-            <div v-if="bundle.items && bundle.items.length > 0" class="items-grid">
-              <div v-for="item in bundle.items" :key="item.id" class="item-card">
-                <div class="item-info">
-                  <router-link :to="`/items/${item.id}`" class="item-name">
-                    {{ item.name }}
-                  </router-link>
-                  <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
-                </div>
-                <div class="item-details">
-                  <span v-if="item.salePrice" class="sale-price">
-                    Sale: ${{ parseFloat(item.salePrice).toFixed(2) }}
-                  </span>
-                  <span v-if="stats" class="cost-share">
-                    <template v-if="bundle.type === 'buy'">
-                      Cost: ${{ stats.costPerItem.toFixed(2) }}
+            <div class="card stat-tile">
+              <div class="label">Fees &amp; shipping</div>
+              <div class="value">{{ money(stats.saleFees, { whole: true }) }}</div>
+              <div class="hint">Net {{ money(stats.netSale, { whole: true }) }}</div>
+            </div>
+            <div class="card stat-tile">
+              <div class="label">Cost of items</div>
+              <div class="value">{{ money(stats.totalCost, { whole: true }) }}</div>
+              <div class="hint">Including extra costs</div>
+            </div>
+            <div class="card stat-tile">
+              <div class="label">{{ stats.soldItems === stats.totalItems && stats.totalItems ? 'Profit' : 'Projected profit' }}</div>
+              <div class="value" :class="tone(stats.profit)">{{ signedMoney(stats.profit, { whole: true }) }}</div>
+              <div class="hint" v-if="stats.roi != null">{{ pct(stats.roi, { signed: true }) }} return</div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Items -->
+        <section class="card items-card">
+          <div class="card-head">
+            <h3>Items</h3>
+            <router-link :to="`/items/new?bundle=${bundle.id}`" class="btn btn-secondary btn-sm"><AppIcon name="plus" :size="15" /> Add item</router-link>
+          </div>
+
+          <div v-if="bundle.type === 'buy' && bundle.items.length" class="split" :class="stats.allocation">
+            <div class="split-text">
+              <AppIcon :name="stats.allocation === 'partial' ? 'alert' : 'scale'" :size="16" />
+              <span v-if="stats.allocation === 'weighted'"><strong>Cost split by value.</strong> Each item's share of the {{ money(stats.purchasePrice) }} follows its sale price.</span>
+              <span v-else-if="stats.allocation === 'partial'"><strong>Split needs a rebalance.</strong> Only some items have a cost weight (one was added later, or had a price typed in), so the cost is split evenly for now.</span>
+              <span v-else><strong>Even split</strong> — {{ money(stats.evenShare) }} each. Rebalance to weight by expected price.</span>
+            </div>
+            <div class="split-actions">
+              <button class="btn btn-sm btn-secondary" @click="handleRebalance" :disabled="busy">{{ stats.allocation === 'weighted' ? 'Rebalance again' : 'Rebalance by value' }}</button>
+              <button v-if="stats.allocation !== 'even'" class="btn btn-sm btn-ghost" @click="handleReset" :disabled="busy">Split evenly</button>
+            </div>
+          </div>
+
+          <div v-if="bundle.items.length" class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="thumb-col"><span class="sr-only">Photo</span></th>
+                  <th>Item</th>
+                  <th class="r">Cost</th>
+                  <th class="r">{{ bundle.type === 'buy' ? 'Sale / asking' : 'Share of sale' }}</th>
+                  <th class="r">Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in bundle.items" :key="item.id">
+                  <td class="thumb-col">
+                    <router-link :to="`/items/${item.id}`" class="thumb mini-thumb">
+                      <img v-if="item.coverPhoto" :src="fileUrl(item.coverPhoto.thumb)" alt="" loading="lazy" />
+                      <AppIcon v-else name="image" :size="16" />
+                    </router-link>
+                  </td>
+                  <td>
+                    <router-link :to="`/items/${item.id}`" class="row-link">{{ item.name }}</router-link>
+                    <div><span class="badge" :class="item.status">{{ statusLabel(item.status) }}</span></div>
+                  </td>
+                  <td class="r money">
+                    {{ money(item.costing.totalCost) }}
+                    <div v-if="item.costing.adjustments" class="small faint">{{ money(item.costing.baseCost) }} {{ signedMoney(item.costing.adjustments) }}</div>
+                  </td>
+                  <td class="r money">
+                    <template v-if="bundle.type === 'sell' || item.status === 'sold'">
+                      {{ item.costing.grossSale != null ? money(item.costing.grossSale) : '—' }}
                     </template>
-                    <template v-else-if="item.purchasePrice">
-                      Cost: ${{ parseFloat(item.purchasePrice).toFixed(2) }}
-                    </template>
-                  </span>
-                </div>
-              </div>
-            </div>
-            
-            <div v-else class="empty-message">
-              <p>No items in this bundle yet. Add items from the item form to associate them with this bundle.</p>
-            </div>
+                    <div v-else class="input-prefix price-input">
+                      <span>$</span>
+                      <input
+                        type="number" step="1" min="0" inputmode="decimal"
+                        class="form-input"
+                        :value="item.expectedSalePrice"
+                        placeholder="Asking"
+                        :aria-label="`Asking price for ${item.name}`"
+                        @keydown.enter="$event.target.blur()"
+                        @change="updateExpectedPrice(item, $event.target.value)"
+                      />
+                    </div>
+                  </td>
+                  <td class="r money" :class="tone(item.costing.profit)">
+                    {{ item.costing.profit != null ? signedMoney(item.costing.profit) : '—' }}
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot v-if="bundle.type === 'buy'">
+                <tr>
+                  <td></td>
+                  <td>Total</td>
+                  <td class="r money">{{ money(stats.totalCost) }}</td>
+                  <td class="r money">{{ money(stats.expectedRevenue) }}</td>
+                  <td class="r money" :class="tone(stats.expectedProfit)">{{ signedMoney(stats.expectedProfit) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div v-else class="empty-state">
+            <p>No items in this bundle yet.</p>
+            <router-link :to="`/items/new?bundle=${bundle.id}`" class="btn btn-primary" style="margin-top: 0.75rem"><AppIcon name="plus" :size="15" /> Add the first item</router-link>
+          </div>
+          <p v-if="bundle.type === 'buy' && bundle.items.some(i => i.status !== 'sold')" class="form-hint">Asking prices save as you leave the field. Sale prices net of fees.</p>
+        </section>
+
+        <div class="lower" :class="{ 'with-notes': bundle.description || bundle.notes }">
+          <AttachmentsPanel owner="bundle" :owner-id="bundle.id" :attachments="bundle.attachments" :wide="!(bundle.description || bundle.notes)" @change="bundle.attachments = $event" />
+
+          <div v-if="bundle.description || bundle.notes" class="notes-col">
+            <section v-if="bundle.description" class="card">
+              <h3>Description</h3>
+              <p class="prose">{{ bundle.description }}</p>
+            </section>
+            <section v-if="bundle.notes" class="card">
+              <h3>Notes</h3>
+              <p class="prose">{{ bundle.notes }}</p>
+            </section>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useBundleStore } from '@/stores/bundle'
 import { useItemStore } from '@/stores/item'
 import NavBar from '@/components/NavBar.vue'
+import AppIcon from '@/components/AppIcon.vue'
+import AttachmentsPanel from '@/components/AttachmentsPanel.vue'
+import { fileUrl } from '@/services/attachments'
+import { money, signedMoney, pct, tone, date, statusLabel, errorMessage } from '@/utils/format'
+import { confirmAction, toastError, toastSuccess } from '@/composables/useNotify'
 
 const router = useRouter()
 const route = useRoute()
@@ -240,511 +209,117 @@ const bundleStore = useBundleStore()
 const itemStore = useItemStore()
 
 const bundle = ref(null)
-const stats = ref(null)
 const loading = ref(true)
-const rebalancing = ref(false)
+const busy = ref(false)
+const stats = computed(() => bundle.value?.stats || {})
 
-const isRebalanced = computed(() => {
-  if (!bundle.value?.items) return false
-  return bundle.value.items.some(item => item.purchasePrice != null && parseFloat(item.purchasePrice) > 0)
-})
-
-const handleRebalance = async () => {
-  try {
-    rebalancing.value = true
-    bundle.value = await bundleStore.rebalanceBundle(route.params.id)
-    stats.value = await bundleStore.getBundleStats(route.params.id)
-  } catch (error) {
-    alert(error.response?.data?.error || 'Failed to rebalance bundle')
-  } finally {
-    rebalancing.value = false
-  }
-}
-
-const updateExpectedPrice = async (itemId, value) => {
-  try {
-    const expectedSalePrice = value ? parseFloat(value) : null
-    await itemStore.updateItem(itemId, { expectedSalePrice })
-    // Refresh bundle data
-    bundle.value = await bundleStore.fetchBundle(route.params.id)
-  } catch (error) {
-    console.error('Error updating expected price:', error)
-    alert('Failed to update expected price')
-  }
-}
-
-const getItemAdditionalCosts = (item) => {
-  if (!item.additionalCosts || item.additionalCosts.length === 0) return 0
-  return item.additionalCosts.reduce((sum, cost) => {
-    const amount = parseFloat(cost.amount || 0)
-    return sum + (cost.type === 'income' ? -amount : amount)
-  }, 0)
-}
-
-const getTotalAdditionalCosts = () => {
-  if (!bundle.value?.items) return 0
-  return bundle.value.items.reduce((sum, item) => {
-    return sum + getItemAdditionalCosts(item)
-  }, 0)
-}
-
-const calculateExpectedRevenue = () => {
-  if (!bundle.value?.items) return 0
-  return bundle.value.items.reduce((sum, item) => {
-    if (item.status === 'sold') {
-      return sum + (parseFloat(item.salePrice) || 0)
-    } else if (item.expectedSalePrice) {
-      return sum + parseFloat(item.expectedSalePrice)
-    }
-    return sum
-  }, 0)
-}
-
-const calculateExpectedProfit = () => {
-  const revenue = calculateExpectedRevenue()
-  const cost = parseFloat(bundle.value?.purchasePrice || 0)
-  const additionalCosts = getTotalAdditionalCosts()
-  return revenue - cost - additionalCosts
-}
-
-const calculateExpectedMargin = () => {
-  const revenue = calculateExpectedRevenue()
-  if (revenue === 0) return '0.0'
-  const profit = calculateExpectedProfit()
-  return ((profit / revenue) * 100).toFixed(1)
-}
-
-const getItemCost = (item) => {
-  // Use item-level purchasePrice if set (e.g. after rebalancing), otherwise fall back to uniform cost
-  if (item.purchasePrice != null && parseFloat(item.purchasePrice) > 0) {
-    return parseFloat(item.purchasePrice)
-  }
-  return stats.value ? stats.value.costPerItem : 0
-}
-
-const getStatusLabel = (status) => {
-  const labels = {
-    'active': 'Active',
-    'complete': 'Complete',
-    'owned': 'Owned',
-    'for_sale': 'For Sale',
-    'sold': 'Sold'
-  }
-  return labels[status] || status
-}
-
-const calculateItemProfit = (item) => {
-  const costPerItem = getItemCost(item)
-  const additionalCosts = getItemAdditionalCosts(item)
-  if (item.status === 'sold') {
-    return (parseFloat(item.salePrice) || 0) - costPerItem - additionalCosts
-  } else if (item.expectedSalePrice) {
-    return parseFloat(item.expectedSalePrice) - costPerItem - additionalCosts
-  }
-  return 0
-}
-
-const formatProfit = (profit) => {
-  const sign = profit >= 0 ? '+' : ''
-  return `${sign}$${profit.toFixed(2)}`
-}
-
-const handleDelete = async () => {
-  if (confirm('Are you sure you want to delete this bundle? You can only delete bundles with no items.')) {
-    try {
-      await bundleStore.deleteBundle(bundle.value.id)
-      router.push('/bundles')
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to delete bundle')
-    }
-  }
-}
-
-onMounted(async () => {
+async function load() {
+  loading.value = !bundle.value
   try {
     bundle.value = await bundleStore.fetchBundle(route.params.id)
-    stats.value = await bundleStore.getBundleStats(route.params.id)
+  } catch (err) {
+    bundle.value = null
+    if (err.response?.status !== 404) toastError(errorMessage(err, "Couldn't load the bundle"))
   } finally {
     loading.value = false
   }
-})
+}
+
+// Keep the attachments we already have when only numbers changed.
+function apply(next) {
+  bundle.value = { ...next, attachments: next.attachments ?? bundle.value?.attachments ?? [] }
+}
+
+async function handleRebalance() {
+  busy.value = true
+  try {
+    apply(await bundleStore.rebalanceBundle(route.params.id))
+    toastSuccess('Cost split by sale price')
+  } catch (err) {
+    toastError(errorMessage(err, 'Failed to rebalance bundle'))
+  } finally {
+    busy.value = false
+  }
+}
+
+async function handleReset() {
+  busy.value = true
+  try {
+    apply(await bundleStore.resetBalance(route.params.id))
+  } catch (err) {
+    toastError(errorMessage(err))
+  } finally {
+    busy.value = false
+  }
+}
+
+async function updateExpectedPrice(item, value) {
+  const expectedSalePrice = value === '' ? null : Number(value)
+  if (expectedSalePrice === (item.expectedSalePrice == null ? null : Number(item.expectedSalePrice))) return
+  try {
+    await itemStore.updateItem(item.id, { expectedSalePrice })
+    apply(await bundleStore.fetchBundle(route.params.id))
+  } catch (err) {
+    toastError(errorMessage(err, 'Failed to update asking price'))
+  }
+}
+
+async function setStatus(status) {
+  try {
+    apply(await bundleStore.updateBundle(bundle.value.id, { status }))
+  } catch (err) {
+    toastError(errorMessage(err))
+  }
+}
+
+async function handleDelete() {
+  if (bundle.value.items.length) {
+    toastError('Move or delete the items in this bundle first — a bundle with items can’t be deleted.')
+    return
+  }
+  const ok = await confirmAction({ title: `Delete ${bundle.value.name}?`, message: 'Its photos and files are deleted too.', confirmLabel: 'Delete bundle', danger: true })
+  if (!ok) return
+  try {
+    await bundleStore.deleteBundle(bundle.value.id)
+    router.push('/bundles')
+  } catch (err) {
+    toastError(errorMessage(err, 'Failed to delete bundle'))
+  }
+}
+
+watch(() => route.params.id, (id) => { if (id) { bundle.value = null; load() } }, { immediate: true })
 </script>
 
 <style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
-}
+.badges { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.title { font-size: 1.6rem; margin-top: 0.4rem; overflow-wrap: anywhere; }
+@media (min-width: 769px) { .title { font-size: 1.9rem; } }
 
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
+.meter { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 0.6rem; overflow: hidden; }
+.meter > div { height: 100%; background: var(--success); }
 
-.loading {
-  text-align: center;
-  padding: 3rem;
-  color: var(--text-secondary);
-}
-
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-  flex-direction: column;
-}
-
-@media (min-width: 640px) {
-  .detail-header {
-    flex-direction: row;
-    margin-bottom: 2rem;
-  }
-}
-
-.detail-header h2 {
-  margin-bottom: 0.5rem;
-  font-size: 1.5rem;
-  word-break: break-word;
-}
-
-.badges {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
-}
-
-.type-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.type-badge.buy {
-  background: #FEF3C7;
-  color: #92400E;
-}
-
-.type-badge.sell {
-  background: #E0E7FF;
-  color: #3730A3;
-}
-
-@media (min-width: 769px) {
-  .detail-header h2 {
-    font-size: 1.75rem;
-  }
-}
-
-.status-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.status-badge.active {
-  background: #DBEAFE;
-  color: #1E40AF;
-}
-
-.status-badge.complete {
-  background: #D1FAE5;
-  color: #065F46;
-}
-
-.status-badge.owned {
-  background: #DBEAFE;
-  color: #1E40AF;
-}
-
-.status-badge.for_sale {
-  background: #FEF3C7;
-  color: #92400E;
-}
-
-.status-badge.sold {
-  background: #D1FAE5;
-  color: #065F46;
-}
-
-.header-actions {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-@media (min-width: 640px) {
-  .header-actions {
-    width: auto;
-  }
-}
-
-.header-actions .btn {
-  text-decoration: none;
-  flex: 1;
-}
-
-@media (min-width: 640px) {
-  .header-actions .btn {
-    flex: initial;
-  }
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-
-@media (min-width: 768px) {
-  .detail-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-  }
-}
-
-.detail-card h3 {
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.detail-card.full-width {
-  grid-column: 1 / -1;
-}
-
-dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.5rem 1rem;
-}
-
-dt {
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-dd {
-  color: var(--text-primary);
-}
-
-.profit {
-  color: var(--success-color);
-  font-weight: 600;
-}
-
-.loss {
-  color: var(--danger-color);
-  font-weight: 600;
-}
-
-.items-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.btn-sm {
-  padding: 0.375rem 0.75rem;
+.items-card { margin-top: 1.25rem; }
+.split {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.7rem 0.85rem; margin-bottom: 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
   font-size: 0.875rem;
 }
+.split.partial { background: var(--warning-soft); color: var(--status-forsale-fg); }
+.split-text { display: flex; gap: 0.5rem; align-items: flex-start; flex: 1 1 280px; }
+.split-text .icon { margin-top: 2px; }
+.split-actions { display: flex; gap: 0.4rem; }
 
-.items-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
+.thumb-col { width: 52px; padding-right: 0 !important; }
+.mini-thumb { width: 40px; height: 40px; }
+.row-link { color: var(--text); font-weight: 600; text-decoration: none; display: inline-block; margin-bottom: 0.2rem; }
+.row-link:hover { color: var(--primary); }
+.price-input { width: 7.5rem; margin-left: auto; }
+.price-input .form-input { min-height: 34px; padding-top: 0.3rem; padding-bottom: 0.3rem; text-align: right; }
 
-.item-card {
-  padding: 0.75rem;
-  border: 1px solid var(--border-color);
-  border-radius: 0.375rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.item-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-}
-
-.item-name {
-  font-weight: 500;
-  color: var(--primary-color);
-  text-decoration: none;
-}
-
-.item-name:hover {
-  text-decoration: underline;
-}
-
-.item-details {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-
-.empty-message {
-  text-align: center;
-  padding: 2rem;
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.section-header h3 {
-  margin-bottom: 0;
-}
-
-.expected-sales-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.expected-item-card {
-  background: #fafafa;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.expected-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.expected-item-name {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--primary-color);
-  text-decoration: none;
-}
-
-.expected-item-name:hover {
-  text-decoration: underline;
-}
-
-.expected-item-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.detail-row .label {
-  font-size: 0.875rem;
-  color: #666;
-}
-
-.detail-row .value {
-  font-weight: 600;
-}
-
-.expected-price-input {
-  width: 100px;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  text-align: right;
-}
-
-.expected-price-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-}
-
-.profit-row {
-  margin-top: 0.25rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #f0f0f0;
-}
-
-.profit-positive {
-  color: #27ae60;
-}
-
-.profit-negative {
-  color: #e74c3c;
-}
-
-.expected-summary {
-  background: #f8f9fa;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-top: 1rem;
-}
-
-.expected-summary h4 {
-  margin: 0 0 1rem 0;
-  font-size: 1.125rem;
-}
-
-.summary-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.stat-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.75rem;
-  background: white;
-  border-radius: 6px;
-}
-
-.stat-label {
-  font-size: 0.875rem;
-  color: #666;
-  font-weight: 500;
-}
-
-.stat-value {
-  font-size: 1.125rem;
-  font-weight: 700;
-}
-
-@media (max-width: 768px) {
-  .expected-sales-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .summary-stats {
-    grid-template-columns: 1fr;
-  }
-}
+.lower { display: grid; gap: 1rem; margin-top: 1.25rem; }
+.notes-col { display: grid; gap: 1rem; align-content: start; }
+@media (min-width: 960px) { .lower.with-notes { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 1.25rem; } }
+.prose { white-space: pre-wrap; line-height: 1.55; }
 </style>

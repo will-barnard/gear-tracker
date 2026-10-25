@@ -13,14 +13,20 @@ export const useItemStore = defineStore('item', () => {
     totalPages: 0
   })
   
+  // Only the latest request's response is applied: typing in search fires a
+  // request per pause, and a slow early response mustn't overwrite a later one.
+  let requestSeq = 0
   const fetchItems = async (filters = {}) => {
+    const seq = ++requestSeq
     loading.value = true
     try {
-      const response = await api.get('/items', { params: filters })
+      const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v != null))
+      const response = await api.get('/items', { params })
+      if (seq !== requestSeq) return
       items.value = response.data.items
       pagination.value = response.data.pagination
     } finally {
-      loading.value = false
+      if (seq === requestSeq) loading.value = false
     }
   }
   

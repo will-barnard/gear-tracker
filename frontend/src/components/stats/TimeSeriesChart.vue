@@ -70,7 +70,7 @@ const mergedOptions = computed(() => ({
     },
     y: {
       beginAtZero: true,
-      grid: { color: 'rgba(0, 0, 0, 0.05)' },
+      grid: { color: 'rgba(128, 128, 128, 0.15)' },
       ticks: {
         font: { size: isMobile.value ? 9 : 11 },
         color: '#6B7280',

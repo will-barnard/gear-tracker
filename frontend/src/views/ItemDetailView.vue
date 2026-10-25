@@ -1,806 +1,407 @@
 <template>
-  <div class="item-detail-view">
+  <div>
     <NavBar />
-    
-    <div class="container">
-      <div v-if="loading" class="loading">Loading...</div>
-      
-      <div v-else-if="item">
-        <div class="detail-header">
-          <div>
-            <h2>{{ item.name }}</h2>
-            <span class="status-badge" :class="item.status">{{ getStatusLabel(item.status) }}</span>
-          </div>
-          <div class="header-actions">
-            <router-link :to="`/items/${item.id}/edit`" class="btn btn-primary">Edit</router-link>
-            <button @click="handleDelete" class="btn btn-danger">Delete</button>
-          </div>
-        </div>
-        
-        <div class="detail-grid">
-          <div class="detail-card card">
-            <h3>Basic Information</h3>
-            <dl>
-              <dt>Brand</dt>
-              <dd>{{ item.brand || '-' }}</dd>
-              <dt>Model</dt>
-              <dd>{{ item.model || '-' }}</dd>
-              <dt>Category</dt>
-              <dd>{{ item.category?.name.replace(/ /g, '\u00A0') || '-' }}</dd>
-              <dt v-if="item.purchaseBundle || item.saleBundle">Bundles</dt>
-              <dd v-if="item.purchaseBundle || item.saleBundle">
-                <div class="bundle-links">
-                  <router-link v-if="item.purchaseBundle" :to="`/bundles/${item.purchaseBundle.id}`" class="bundle-link">
-                    <span class="bundle-type">Buy:</span> {{ item.purchaseBundle.name }}
-                  </router-link>
-                  <router-link v-if="item.saleBundle" :to="`/bundles/${item.saleBundle.id}`" class="bundle-link">
-                    <span class="bundle-type">Sell:</span> {{ item.saleBundle.name }}
-                  </router-link>
-                </div>
-              </dd>
-              <dt>Serial Number</dt>
-              <dd>{{ item.serialNumber || '-' }}</dd>
-              <dt>Condition</dt>
-              <dd>{{ item.condition || '-' }}</dd>
-            </dl>
-          </div>
-          
-          <div class="detail-card card">
-            <h3>Purchase Details</h3>
-            <dl>
-              <dt v-if="item.purchaseBundleId">Cost Share (from bundle)</dt>
-              <dt v-else>Purchase Price</dt>
-              <dd v-if="item.purchaseBundleId && (item.purchasePrice || purchaseBundle)">
-                ${{ itemCost.toFixed(2) }}
-                <span class="help-text">
-                  ({{ item.purchaseBundle?.name }}<template v-if="item.purchasePrice && parseFloat(item.purchasePrice) > 0"> · rebalanced</template>)
-                </span>
-              </dd>
-              <dd v-else>{{ item.purchasePrice ? `$${parseFloat(item.purchasePrice).toFixed(2)}` : '-' }}</dd>
-              <dt>Purchase Date</dt>
-              <dd>{{ item.purchaseDate || item.purchaseBundle?.purchaseDate ? new Date(item.purchaseDate || item.purchaseBundle.purchaseDate).toLocaleDateString() : '-' }}</dd>
-              <dt>Purchase Location</dt>
-              <dd>{{ item.purchaseLocation || item.purchaseBundle?.purchaseLocation || '-' }}</dd>
-            </dl>
-          </div>
-          
-          <div v-if="item.status === 'for_sale'" class="detail-card card">
-            <h3>For Sale Details</h3>
-            <dl>
-              <dt>Projected Sale Price</dt>
-              <dd>{{ item.expectedSalePrice ? `$${parseFloat(item.expectedSalePrice).toFixed(2)}` : '-' }}</dd>
-              <dt>Listed Online</dt>
-              <dd>{{ item.isListedOnline ? '✓ Yes' : '✗ No' }}</dd>
-              <dt>Projected Profit</dt>
-              <dd v-if="item.expectedSalePrice" :class="projectedProfit >= 0 ? 'profit' : 'loss'">
-                {{ projectedProfit >= 0 ? '+' : '' }}${{ projectedProfit.toFixed(2) }}
-              </dd>
-              <dd v-else>-</dd>
-            </dl>
-          </div>
-          
-          <div v-if="item.status === 'sold'" class="detail-card card">
-            <h3>Sale Details</h3>
-            <dl>
-              <dt v-if="item.saleBundleId">Sale Bundle Price</dt>
-              <dt v-else>Sale Price</dt>
-              <dd v-if="item.saleBundleId && item.saleBundle">
-                ${{ parseFloat(item.saleBundle.salePrice || 0).toFixed(2) }}
-                <span class="help-text">({{ item.saleBundle.name }})</span>
-              </dd>
-              <dd v-else>{{ item.salePrice ? `$${parseFloat(item.salePrice).toFixed(2)}` : '-' }}</dd>
-              <dt>Sale Date</dt>
-              <dd>{{ item.saleDate || item.saleBundle?.saleDate ? new Date(item.saleDate || item.saleBundle.saleDate).toLocaleDateString() : '-' }}</dd>
-              <dt>Sale Location</dt>
-              <dd>{{ item.saleLocation || item.saleBundle?.saleLocation || '-' }}</dd>
-              <dt v-if="!item.saleBundleId">Profit/Loss</dt>
-              <dd v-if="!item.saleBundleId" :class="profit >= 0 ? 'profit' : 'loss'">
-                {{ profit >= 0 ? '+' : '' }}${{ profit.toFixed(2) }}
-              </dd>
-            </dl>
-          </div>
-          
-          <div class="detail-card card full-width">
-            <div class="costs-header">
-              <h3>Additional Costs</h3>
-              <button @click="showAddCostModal = true" class="btn btn-primary btn-sm">
-                Add Cost
-              </button>
-            </div>
-            <div v-if="item.additionalCosts?.length">
-              <table class="costs-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th>Amount</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="cost in item.additionalCosts" :key="cost.id">
-                    <td data-label="Date">{{ new Date(cost.date).toLocaleDateString() }}</td>
-                    <td data-label="Description">{{ cost.description }}</td>
-                    <td data-label="Type">
-                      <span :class="['badge', cost.type === 'income' ? 'badge-income' : 'badge-expense']">
-                        {{ cost.type === 'income' ? 'Income' : 'Expense' }}
-                      </span>
-                    </td>
-                    <td data-label="Category">{{ cost.category || '-' }}</td>
-                    <td data-label="Amount">${{ parseFloat(cost.amount).toFixed(2) }}</td>
-                    <td data-label="Actions">
-                      <button @click="editCost(cost)" class="btn-icon" title="Edit">
-                        ✏️
-                      </button>
-                      <button @click="deleteCost(cost.id)" class="btn-icon" title="Delete">
-                        🗑️
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colspan="5"><strong>Net Additional Costs</strong></td>
-                    <td><strong>${{ totalAdditionalCosts.toFixed(2) }}</strong></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-            <p v-else class="empty-message">No additional costs recorded</p>
-          </div>
-          
-          <div v-if="item.description" class="detail-card card full-width">
-            <h3>Description</h3>
-            <p>{{ item.description }}</p>
-          </div>
-          
-          <div v-if="item.notes" class="detail-card card full-width">
-            <h3>Notes</h3>
-            <p>{{ item.notes }}</p>
-          </div>
-        </div>
+    <main class="page">
+      <div v-if="loading" class="loading-block"><div class="spinner"></div>Loading…</div>
+
+      <div v-else-if="!item" class="empty-state card">
+        <p>That item doesn't exist (or was deleted).</p>
+        <router-link to="/items" class="btn btn-secondary" style="margin-top: 1rem">Back to items</router-link>
       </div>
-    </div>
+
+      <template v-else>
+        <router-link :to="backTo.path" class="back-link"><AppIcon name="arrow-left" :size="15" /> {{ backTo.label }}</router-link>
+
+        <header class="page-header detail-header">
+          <div class="title-block">
+            <div class="badges">
+              <span class="badge" :class="item.status">{{ statusLabel(item.status) }}</span>
+              <span v-if="item.intent === 'keep'" class="badge keep">Keeper</span>
+              <span v-if="item.status === 'for_sale' && item.isListedOnline" class="badge active">Listed{{ item.listingPlatform ? ` on ${item.listingPlatform}` : '' }}</span>
+            </div>
+            <h2>{{ item.name }}</h2>
+            <p v-if="item.brand || item.model" class="sub">{{ [item.brand, item.model].filter(Boolean).join(' · ') }}</p>
+          </div>
+          <div class="page-actions">
+            <router-link :to="`/items/${item.id}/edit`" class="btn btn-primary"><AppIcon name="edit" :size="15" /> Edit</router-link>
+            <button @click="handleDelete" class="btn btn-danger btn-icon" title="Delete item" aria-label="Delete item"><AppIcon name="trash" :size="16" /></button>
+          </div>
+        </header>
+
+        <!-- Bundle links: the way back to the lot this came from / went out with -->
+        <div v-if="item.purchaseBundle || item.saleBundle" class="bundle-links">
+          <router-link v-if="item.purchaseBundle" :to="`/bundles/${item.purchaseBundle.id}`" class="bundle-link card card-link">
+            <span class="bl-icon"><AppIcon name="package" :size="18" /></span>
+            <span class="bl-text">
+              <span class="bl-label">Bought in bundle</span>
+              <span class="bl-name">{{ item.purchaseBundle.name }}</span>
+            </span>
+            <span class="bl-meta small muted">{{ money(item.purchaseBundle.purchasePrice) }} lot<template v-if="item.purchaseBundle.purchaseDate"> · {{ date(item.purchaseBundle.purchaseDate) }}</template></span>
+            <AppIcon name="chevron-right" :size="18" class="bl-arrow" />
+          </router-link>
+          <router-link v-if="item.saleBundle" :to="`/bundles/${item.saleBundle.id}`" class="bundle-link card card-link">
+            <span class="bl-icon"><AppIcon name="package" :size="18" /></span>
+            <span class="bl-text">
+              <span class="bl-label">Sold in bundle</span>
+              <span class="bl-name">{{ item.saleBundle.name }}</span>
+            </span>
+            <span class="bl-meta small muted">{{ money(item.saleBundle.salePrice) }}<template v-if="item.saleBundle.saleDate"> · {{ date(item.saleBundle.saleDate) }}</template></span>
+            <AppIcon name="chevron-right" :size="18" class="bl-arrow" />
+          </router-link>
+        </div>
+
+        <div class="layout">
+          <div class="main-col">
+            <AttachmentsPanel owner="item" :owner-id="item.id" :attachments="item.attachments" show="photos" @change="item.attachments = $event" />
+
+            <section class="card">
+              <h3>Details</h3>
+              <dl class="dl">
+                <dt>Category</dt>
+                <dd>
+                  <span v-if="item.category" class="inline-tag"><span class="cat-dot" :style="{ background: item.category.color }"></span>{{ item.category.name }}</span>
+                  <span v-else class="faint">—</span>
+                </dd>
+                <template v-if="item.serialNumber"><dt>Serial</dt><dd class="mono">{{ item.serialNumber }}</dd></template>
+                <template v-if="item.condition"><dt>Condition</dt><dd>{{ item.condition }}</dd></template>
+                <dt>Purchased</dt>
+                <dd>
+                  {{ date(item.costing.purchaseDate) }}
+                  <span v-if="purchaseLocation" class="muted"> · {{ purchaseLocation }}</span>
+                </dd>
+                <template v-if="item.status === 'sold'">
+                  <dt>Sold</dt>
+                  <dd>
+                    {{ date(item.costing.saleDate) }}
+                    <span v-if="saleLocation" class="muted"> · {{ saleLocation }}</span>
+                  </dd>
+                </template>
+                <template v-if="item.costing.daysHeld != null">
+                  <dt>{{ item.status === 'sold' ? 'Held for' : 'Owned for' }}</dt>
+                  <dd>{{ days(item.costing.daysHeld) }}</dd>
+                </template>
+              </dl>
+            </section>
+
+            <section v-if="item.description" class="card">
+              <h3>Description</h3>
+              <p class="prose">{{ item.description }}</p>
+            </section>
+
+            <section v-if="item.notes" class="card">
+              <h3>Notes</h3>
+              <p class="prose">{{ item.notes }}</p>
+            </section>
+          </div>
+
+          <aside class="side-col">
+            <!-- Money -->
+            <section class="card money-card">
+              <h3>Numbers</h3>
+              <dl class="dl money-dl">
+                <dt>{{ costLabel }}</dt>
+                <dd class="money r">{{ money(item.costing.baseCost) }}</dd>
+                <template v-if="item.costing.adjustments">
+                  <dt>Additional costs</dt>
+                  <dd class="money r">{{ signedMoney(item.costing.adjustments) }}</dd>
+                </template>
+                <dt class="total">Total cost</dt>
+                <dd class="money r total">{{ money(item.costing.totalCost) }}</dd>
+
+                <template v-if="item.costing.saleKind">
+                  <hr />
+                  <dt>{{ item.costing.saleKind === 'sold' ? (item.costing.saleSource === 'bundle' ? 'Share of bundle sale' : 'Sale price') : (item.costing.saleSource === 'bundle' ? 'Share of bundle ask' : 'Asking price') }}</dt>
+                  <dd class="money r">{{ money(item.costing.grossSale) }}</dd>
+                  <template v-if="item.costing.saleFees">
+                    <dt>Fees &amp; shipping</dt>
+                    <dd class="money r">−{{ money(item.costing.saleFees) }}</dd>
+                  </template>
+                  <dt class="total">{{ item.costing.saleKind === 'sold' ? 'Profit' : 'Projected profit' }}</dt>
+                  <dd class="money r total" :class="tone(item.costing.profit)">{{ signedMoney(item.costing.profit) }}</dd>
+                  <template v-if="item.costing.roi != null">
+                    <dt>Return</dt>
+                    <dd class="money r" :class="tone(item.costing.roi)">{{ pct(item.costing.roi, { signed: true }) }}</dd>
+                  </template>
+                </template>
+
+                <template v-if="item.status !== 'sold' && (item.estimatedValue || item.intent === 'keep')">
+                  <hr />
+                  <dt>Estimated value</dt>
+                  <dd class="money r">
+                    <template v-if="item.estimatedValue">{{ money(item.estimatedValue) }}</template>
+                    <router-link v-else :to="`/items/${item.id}/edit#value`" class="small">Add estimate</router-link>
+                  </dd>
+                  <template v-if="item.estimatedValue">
+                    <dt>Unrealized</dt>
+                    <dd class="money r" :class="tone(item.estimatedValue - item.costing.totalCost)">{{ signedMoney(item.estimatedValue - item.costing.totalCost) }}</dd>
+                  </template>
+                </template>
+              </dl>
+              <p v-if="item.costing.costSource !== 'item'" class="form-hint cost-note">
+                <template v-if="item.costing.costSource === 'bundle-weighted'">Weighted share of the {{ money(item.purchaseBundle?.purchasePrice) }} bundle, by sale price.</template>
+                <template v-else>Even share of the {{ money(item.purchaseBundle?.purchasePrice) }} bundle.<template v-if="item.costing.allocation === 'partial'"> Some items in the bundle have weights and some don't — rebalance the bundle to split by value.</template></template>
+              </p>
+            </section>
+
+            <!-- Listing -->
+            <section v-if="item.status === 'for_sale'" class="card">
+              <h3>Listing</h3>
+              <dl class="dl">
+                <dt>Status</dt>
+                <dd>{{ item.isListedOnline ? 'Listed' : 'Not listed yet' }}</dd>
+                <template v-if="item.listingPlatform"><dt>Where</dt><dd>{{ item.listingPlatform }}</dd></template>
+                <template v-if="item.listedAt">
+                  <dt>Since</dt>
+                  <dd>{{ date(item.listedAt) }} <span class="muted" :class="{ stale: item.costing.daysListed >= 60 }">({{ days(item.costing.daysListed) }})</span></dd>
+                </template>
+              </dl>
+              <a v-if="item.listingUrl" :href="item.listingUrl" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin-top: 1rem">
+                View listing <AppIcon name="external" :size="15" />
+              </a>
+            </section>
+
+            <!-- Additional costs -->
+            <section class="card">
+              <div class="card-head">
+                <h3>Additional costs</h3>
+                <button @click="openCost()" class="btn btn-secondary btn-sm"><AppIcon name="plus" :size="15" /> Add</button>
+              </div>
+              <ul v-if="item.additionalCosts?.length" class="cost-list">
+                <li v-for="cost in item.additionalCosts" :key="cost.id" class="cost">
+                  <div class="cost-main">
+                    <span class="cost-desc">{{ cost.description }}</span>
+                    <span class="small faint">{{ date(cost.date) }}<template v-if="cost.category"> · {{ cost.category }}</template></span>
+                  </div>
+                  <span class="money cost-amt" :class="cost.type === 'income' ? 'positive' : ''">
+                    {{ cost.type === 'income' ? '−' : '' }}{{ money(cost.amount) }}
+                  </span>
+                  <span class="cost-actions">
+                    <button @click="openCost(cost)" class="btn btn-icon btn-sm btn-ghost" title="Edit"><AppIcon name="edit" :size="14" /></button>
+                    <button @click="deleteCost(cost)" class="btn btn-icon btn-sm btn-ghost" title="Delete"><AppIcon name="trash" :size="14" /></button>
+                  </span>
+                </li>
+                <li class="cost cost-total">
+                  <span class="cost-main">Net</span>
+                  <span class="money cost-amt">{{ signedMoney(item.costing.adjustments) }}</span>
+                  <span class="cost-actions"></span>
+                </li>
+              </ul>
+              <p v-else class="small muted">Repairs, parts, shipping in — anything that adds to what this cost you. Credits (like selling a replaced part) subtract.</p>
+            </section>
+
+            <AttachmentsPanel owner="item" :owner-id="item.id" :attachments="item.attachments" show="documents" @change="item.attachments = $event" />
+          </aside>
+        </div>
+      </template>
+    </main>
 
     <!-- Add/Edit Cost Modal -->
-    <div v-if="showAddCostModal || editingCost" class="modal-overlay" @click.self="closeCostModal">
-      <div class="modal-content">
-        <h3>{{ editingCost ? 'Edit Cost' : 'Add Cost' }}</h3>
-        <form @submit.prevent="saveCost">
+    <div v-if="costModal" class="modal-overlay" @click.self="closeCostModal">
+      <form class="modal" @submit.prevent="saveCost">
+        <h3>{{ editingCost ? 'Edit cost' : 'Add cost' }}</h3>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <input v-model="costForm.description" type="text" class="form-input" placeholder="e.g. New tines, shipping in" required />
+        </div>
+        <div class="form-group">
+          <div class="segmented" role="radiogroup">
+            <button type="button" :class="{ active: costForm.type === 'expense' }" @click="costForm.type = 'expense'">Expense</button>
+            <button type="button" :class="{ active: costForm.type === 'income' }" @click="costForm.type = 'income'">Credit / income</button>
+          </div>
+          <small class="form-hint">Expenses add to cost; credits offset it (e.g. selling a replaced part).</small>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Amount</label>
+            <div class="input-prefix"><span>$</span><input v-model="costForm.amount" type="number" step="0.01" min="0" inputmode="decimal" class="form-input" required /></div>
+          </div>
           <div class="form-group">
             <label class="form-label">Date</label>
-            <input
-              v-model="costForm.date"
-              type="date"
-              class="form-input"
-              required
-            />
+            <input v-model="costForm.date" type="date" class="form-input" required />
           </div>
-          
-          <div class="form-group">
-            <label class="form-label">Description *</label>
-            <input
-              v-model="costForm.description"
-              type="text"
-              class="form-input"
-              required
-            />
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">Type *</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input
-                  v-model="costForm.costType"
-                  type="radio"
-                  value="expense"
-                  class="radio-input"
-                />
-                <span>Expense</span>
-              </label>
-              <label class="radio-label">
-                <input
-                  v-model="costForm.costType"
-                  type="radio"
-                  value="income"
-                  class="radio-input"
-                />
-                <span>Income/Credit</span>
-              </label>
-            </div>
-            <small class="form-hint">Expenses add to cost, income offsets cost (e.g., selling a replaced part)</small>
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">Category</label>
-            <input
-              v-model="costForm.category"
-              type="text"
-              class="form-input"
-              placeholder="e.g., Repair, Shipping, Parts"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">Amount *</label>
-            <input
-              v-model="costForm.amount"
-              type="number"
-              step="0.01"
-              min="0"
-              class="form-input"
-              required
-            />
-          </div>
-          
-          <div v-if="costError" class="error-message">
-            {{ costError }}
-          </div>
-          
-          <div class="modal-actions">
-            <button type="button" @click="closeCostModal" class="btn btn-secondary">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="savingCost">
-              {{ savingCost ? 'Saving...' : 'Save' }}
-            </button>
-          </div>
-        </form>
-      </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <input v-model="costForm.category" type="text" class="form-input" list="cost-cats" placeholder="Repair, Parts, Shipping…" />
+          <datalist id="cost-cats"><option>Repair</option><option>Parts</option><option>Shipping</option><option>Cleaning</option><option>Case</option></datalist>
+        </div>
+        <div v-if="costError" class="alert alert-error">{{ costError }}</div>
+        <div class="modal-actions">
+          <button type="button" @click="closeCostModal" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="savingCost">{{ savingCost ? 'Saving…' : 'Save' }}</button>
+        </div>
+      </form>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useItemStore } from '@/stores/item'
-import { useBundleStore } from '@/stores/bundle'
 import NavBar from '@/components/NavBar.vue'
+import AppIcon from '@/components/AppIcon.vue'
+import AttachmentsPanel from '@/components/AttachmentsPanel.vue'
 import api from '@/services/api'
+import { money, signedMoney, pct, tone, date, days, statusLabel, todayISO, errorMessage } from '@/utils/format'
+import { confirmAction, toastError, toastSuccess } from '@/composables/useNotify'
 
 const router = useRouter()
 const route = useRoute()
 const itemStore = useItemStore()
-const bundleStore = useBundleStore()
 
 const item = ref(null)
-const purchaseBundle = ref(null)
 const loading = ref(true)
-const showAddCostModal = ref(false)
-const editingCost = ref(null)
-const costForm = ref({
-  date: new Date().toISOString().split('T')[0],
-  description: '',
-  costType: 'expense',
-  category: '',
-  amount: ''
+
+// Came from a bundle page? Go back there.
+const backTo = computed(() => {
+  const back = window.history.state?.back
+  if (back && back.startsWith('/bundles/')) return { path: back, label: 'Bundle' }
+  if (back && back.startsWith('/for-sale')) return { path: back, label: 'For sale' }
+  if (back && back.startsWith('/items') && !back.includes('/edit') && back !== '/items/new') return { path: back, label: 'Items' }
+  return { path: '/items', label: 'Items' }
 })
+
+const costLabel = computed(() => {
+  if (!item.value) return ''
+  if (item.value.costing.costSource === 'bundle-weighted') return 'Bundle share (weighted)'
+  if (item.value.costing.costSource === 'bundle-even') return 'Bundle share (even)'
+  return 'Purchase price'
+})
+const purchaseLocation = computed(() => item.value?.purchaseLocation || item.value?.purchaseBundle?.purchaseLocation)
+const saleLocation = computed(() => item.value?.saleLocation || item.value?.saleBundle?.saleLocation)
+
+async function load() {
+  loading.value = true
+  try {
+    item.value = await itemStore.fetchItem(route.params.id)
+  } catch (err) {
+    item.value = null
+    if (err.response?.status !== 404) toastError(errorMessage(err, "Couldn't load the item"))
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleDelete = async () => {
+  const files = item.value.attachments?.length || 0
+  const ok = await confirmAction({
+    title: `Delete ${item.value.name}?`,
+    message: `This removes the item, its costs${files ? ` and ${files} attached file${files === 1 ? '' : 's'}` : ''}. It can't be undone.`,
+    confirmLabel: 'Delete item',
+    danger: true
+  })
+  if (!ok) return
+  try {
+    await itemStore.deleteItem(item.value.id)
+    toastSuccess('Item deleted')
+    router.push(backTo.value.path.startsWith('/bundles/') ? backTo.value.path : '/items')
+  } catch (err) {
+    toastError(errorMessage(err, "Couldn't delete the item"))
+  }
+}
+
+// ── costs ────────────────────────────────────────────────
+const costModal = ref(false)
+const editingCost = ref(null)
+const blankCost = () => ({ date: todayISO(), description: '', type: 'expense', category: '', amount: '' })
+const costForm = ref(blankCost())
 const costError = ref('')
 const savingCost = ref(false)
 
-const totalAdditionalCosts = computed(() => {
-  if (!item.value?.additionalCosts?.length) return 0
-  return item.value.additionalCosts.reduce((sum, cost) => {
-    const amount = parseFloat(cost.amount)
-    return sum + (cost.type === 'income' ? -amount : amount)
-  }, 0)
-})
-
-const itemCost = computed(() => {
-  if (item.value?.purchaseBundleId) {
-    // Use rebalanced per-item cost if set, otherwise calculate from bundle
-    if (item.value.purchasePrice != null && parseFloat(item.value.purchasePrice) > 0) {
-      return parseFloat(item.value.purchasePrice)
-    }
-    // Calculate uniform cost from bundle if no rebalanced cost
-    if (purchaseBundle.value) {
-      const bundlePrice = parseFloat(purchaseBundle.value.purchasePrice || 0)
-      const itemCount = purchaseBundle.value.items?.length || 1
-      return bundlePrice / itemCount
-    }
-  }
-  return parseFloat(item.value?.purchasePrice || 0)
-})
-
-const profit = computed(() => {
-  if (!item.value || item.value.status !== 'sold') return 0
-  const sale = parseFloat(item.value.salePrice || 0)
-  return sale - itemCost.value - totalAdditionalCosts.value
-})
-
-const projectedProfit = computed(() => {
-  if (!item.value || item.value.status !== 'for_sale' || !item.value.expectedSalePrice) return 0
-  const expectedSale = parseFloat(item.value.expectedSalePrice || 0)
-  return expectedSale - itemCost.value - totalAdditionalCosts.value
-})
-
-const getStatusLabel = (status) => {
-  const labels = {
-    'owned': 'Owned',
-    'for_sale': 'For\u00A0Sale',
-    'sold': 'Sold'
-  }
-  return labels[status] || status
-}
-
-const editCost = (cost) => {
+function openCost(cost = null) {
   editingCost.value = cost
-  costForm.value = {
-    date: cost.date ? new Date(cost.date).toISOString().split('T')[0] : '',
-    description: cost.description,
-    costType: cost.type || 'expense',
-    category: cost.category || '',
-    amount: cost.amount
-  }
-}
-
-const closeCostModal = () => {
-  showAddCostModal.value = false
-  editingCost.value = null
-  costForm.value = {
-    date: new Date().toISOString().split('T')[0],
-    description: '',
-    costType: 'expense',
-    category: '',
-    amount: ''
-  }
+  costForm.value = cost
+    ? { date: cost.date, description: cost.description, type: cost.type || 'expense', category: cost.category || '', amount: cost.amount }
+    : blankCost()
   costError.value = ''
+  costModal.value = true
 }
 
-const saveCost = async () => {
+function closeCostModal() {
+  costModal.value = false
+  editingCost.value = null
+}
+
+async function saveCost() {
   costError.value = ''
   savingCost.value = true
-  
   try {
-    const data = {
-      itemId: item.value.id,
-      date: costForm.value.date,
-      description: costForm.value.description,
-      type: costForm.value.costType,
-      category: costForm.value.category || null,
-      amount: parseFloat(costForm.value.amount)
-    }
-    
-    if (editingCost.value) {
-      await api.put(`/costs/${editingCost.value.id}`, data)
-    } else {
-      await api.post('/costs', data)
-    }
-    
-    // Refresh item data
-    item.value = await itemStore.fetchItem(route.params.id)
-    if (item.value.purchaseBundleId) {
-      purchaseBundle.value = await bundleStore.fetchBundle(item.value.purchaseBundleId)
-    }
+    const data = { ...costForm.value, itemId: item.value.id, amount: Number(costForm.value.amount), category: costForm.value.category || null }
+    if (editingCost.value) await api.put(`/costs/${editingCost.value.id}`, data)
+    else await api.post('/costs', data)
+    const attachments = item.value.attachments
+    item.value = { ...(await itemStore.fetchItem(route.params.id)), attachments }
     closeCostModal()
-  } catch (error) {
-    costError.value = error.response?.data?.error || 'Failed to save cost'
+  } catch (err) {
+    costError.value = errorMessage(err, 'Failed to save cost')
   } finally {
     savingCost.value = false
   }
 }
 
-const deleteCost = async (costId) => {
-  if (!confirm('Are you sure you want to delete this cost?')) return
-  
+async function deleteCost(cost) {
+  const ok = await confirmAction({ title: `Delete “${cost.description}”?`, confirmLabel: 'Delete', danger: true })
+  if (!ok) return
   try {
-    await api.delete(`/costs/${costId}`)
-    // Refresh item data
+    await api.delete(`/costs/${cost.id}`)
     item.value = await itemStore.fetchItem(route.params.id)
-    if (item.value.purchaseBundleId) {
-      purchaseBundle.value = await bundleStore.fetchBundle(item.value.purchaseBundleId)
-    }
-  } catch (error) {
-    alert(error.response?.data?.error || 'Failed to delete cost')
+  } catch (err) {
+    toastError(errorMessage(err, 'Failed to delete cost'))
   }
 }
 
-const handleDelete = async () => {
-  if (confirm('Are you sure you want to delete this item?')) {
-    await itemStore.deleteItem(item.value.id)
-    router.push('/items')
-  }
-}
-
-onMounted(async () => {
-  try {
-    item.value = await itemStore.fetchItem(route.params.id)
-    if (item.value.purchaseBundleId) {
-      purchaseBundle.value = await bundleStore.fetchBundle(item.value.purchaseBundleId)
-    }
-  } finally {
-    loading.value = false
-  }
-})
+watch(() => route.params.id, (id) => { if (id) load() }, { immediate: true })
 </script>
 
 <style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
-}
+.detail-header { margin-bottom: 1rem; }
+.title-block h2 { font-size: 1.6rem; margin-top: 0.4rem; overflow-wrap: anywhere; }
+.title-block .badges { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+@media (min-width: 769px) { .title-block h2 { font-size: 1.9rem; } }
 
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
-
-.loading {
-  text-align: center;
-  padding: 3rem;
-  color: var(--text-secondary);
-}
-
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-  flex-direction: column;
-}
-
-@media (min-width: 640px) {
-  .detail-header {
-    flex-direction: row;
-    margin-bottom: 2rem;
-  }
-}
-
-.detail-header h2 {
-  margin-bottom: 0.5rem;
-  font-size: 1.5rem;
-  word-break: break-word;
-}
-
-@media (min-width: 769px) {
-  .detail-header h2 {
-    font-size: 1.75rem;
-  }
-}
-
-.status-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.status-badge.owned {
-  background: #DBEAFE;
-  color: #1E40AF;
-}
-
-.status-badge.for_sale {
-  background: #FEF3C7;
-  color: #92400E;
-}
-
-.status-badge.sold {
-  background: #D1FAE5;
-  color: #065F46;
-}
-
-.badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.badge-expense {
-  background: #FEE2E2;
-  color: #DC2626;
-}
-
-.badge-income {
-  background: #D1FAE5;
-  color: #065F46;
-}
-
-.header-actions {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-@media (min-width: 640px) {
-  .header-actions {
-    width: auto;
-  }
-}
-
-.header-actions .btn {
-  text-decoration: none;
-  flex: 1;
-}
-
-@media (min-width: 640px) {
-  .header-actions .btn {
-    flex: initial;
-  }
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-
-@media (min-width: 768px) {
-  .detail-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  .detail-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  }
-}
-
-.detail-card h3 {
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.detail-card.full-width {
-  grid-column: 1 / -1;
-}
-
-dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.5rem 1rem;
-}
-
-dt {
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-dd {
-  color: var(--text-primary);
-}
-
-.bundle-links {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
+.bundle-links { display: grid; gap: 0.5rem; margin-bottom: 1.25rem; }
+@media (min-width: 720px) { .bundle-links { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); } }
 .bundle-link {
-  color: var(--primary-color);
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: color-mix(in srgb, var(--primary-soft) 45%, var(--surface));
+}
+.bl-icon {
+  width: 36px; height: 36px; border-radius: 8px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary-soft); color: var(--primary-on-soft);
+}
+.bl-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.bl-label { font-size: 0.6875rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
+.bl-name { font-weight: 650; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-meta { white-space: nowrap; }
+.bl-arrow { color: var(--text-faint); }
+.bundle-link:hover .bl-name { color: var(--primary); }
+@media (max-width: 480px) { .bl-meta { display: none; } }
+
+.layout { display: grid; gap: 1rem; }
+.main-col, .side-col { display: grid; gap: 1rem; align-content: start; min-width: 0; }
+@media (min-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); gap: 1.25rem; }
+  .main-col, .side-col { gap: 1.25rem; }
 }
 
-.bundle-link:hover {
-  text-decoration: underline;
-}
+.money-dl { grid-template-columns: 1fr auto; }
+.money-dl .r { text-align: right; }
+.cost-note { margin-top: 0.85rem; }
+.stale { color: var(--warning); font-weight: 600; }
+.inline-tag { display: inline-flex; align-items: center; gap: 0.4rem; }
+.mono { font-family: var(--font-mono); font-size: 0.85rem; }
+.prose { white-space: pre-wrap; line-height: 1.55; }
 
-.bundle-type {
-  font-weight: 600;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-}
-
-.help-text {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  display: block;
-}
-
-.profit {
-  color: var(--success-color);
-  font-weight: 600;
-}
-
-.loss {
-  color: var(--danger-color);
-  font-weight: 600;
-}
-
-.costs-table {
-  width: 100%;
-  border-collapse: collapse;
-  overflow-x: auto;
-  display: block;
-}
-
-@media (min-width: 640px) {
-  .costs-table {
-    display: table;
-  }
-}
-
-.costs-table thead {
-  display: none;
-}
-
-@media (min-width: 640px) {
-  .costs-table thead {
-    display: table-header-group;
-  }
-}
-
-.costs-table tr {
-  display: block;
-  margin-bottom: 1rem;
-  border: 1px solid var(--border-color);
-  border-radius: 0.375rem;
-  padding: 0.75rem;
-}
-
-@media (min-width: 640px) {
-  .costs-table tr {
-    display: table-row;
-    margin-bottom: 0;
-    border: none;
-    border-radius: 0;
-    padding: 0;
-  }
-}
-
-.costs-table th,
-.costs-table td {
-  padding: 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-  display: block;
-}
-
-@media (min-width: 640px) {
-  .costs-table th,
-  .costs-table td {
-    display: table-cell;
-    padding: 0.75rem;
-  }
-}
-
-.costs-table th {
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--background);
-}
-
-.costs-table tbody tr {
-  border-bottom: none;
-}
-
-@media (min-width: 640px) {
-  .costs-table tbody tr {
-    border-bottom: 1px solid var(--border-color);
-  }
-}
-
-.costs-table td:before {
-  content: attr(data-label);
-  font-weight: 500;
-  color: var(--text-secondary);
-  display: inline-block;
-  width: 120px;
-}
-
-@media (min-width: 640px) {
-  .costs-table td:before {
-    content: none;
-  }
-}
-
-.costs-table tfoot td {
-  font-weight: 500;
-  border-top: 2px solid var(--border-color);
-}
-
-.empty-message {
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-.costs-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.btn-sm {
-  padding: 0.375rem 0.75rem;
-  font-size: 0.875rem;
-}
-
-.btn-icon {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.25rem;
-  font-size: 1rem;
-  opacity: 0.7;
-  transition: opacity 0.2s;
-}
-
-.btn-icon:hover {
-  opacity: 1;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 0.5rem;
-  padding: 1.5rem;
-  max-width: 500px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-content h3 {
-  margin-bottom: 1.5rem;
-  color: var(--text-primary);
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
-  justify-content: flex-end;
-}
-
-.error-message {
-  padding: 0.75rem;
-  background-color: #FEE2E2;
-  color: #DC2626;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  margin-top: 1rem;
-}
-
-.radio-group {
-  display: flex;
-  gap: 1rem;
-  margin-top: 0.5rem;
-}
-
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.radio-input {
-  cursor: pointer;
-}
-
-.form-hint {
-  display: block;
-  margin-top: 0.25rem;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-}
+.cost-list { display: flex; flex-direction: column; }
+.cost { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0; border-top: 1px solid var(--border); }
+.cost:first-child { border-top: 0; padding-top: 0; }
+.cost-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cost-desc { font-weight: 550; overflow-wrap: anywhere; }
+.cost-amt { font-weight: 600; white-space: nowrap; }
+.cost-actions { display: flex; width: 64px; justify-content: flex-end; }
+.cost-total { font-weight: 650; border-top: 1px solid var(--border-strong); }
 </style>

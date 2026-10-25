@@ -3,8 +3,20 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
 class AuthService {
+  // Signup is open only until the first account exists. The site is public, and
+  // with file uploads an open signup would be free photo hosting on the NAS.
+  // ALLOW_REGISTRATION=true reopens it (e.g. to add a second person).
+  async registrationOpen() {
+    if (process.env.ALLOW_REGISTRATION === 'true') return true;
+    return (await User.count()) === 0;
+  }
+
   async register(userData) {
     const { email, password, username, firstName, lastName } = userData;
+
+    if (!(await this.registrationOpen())) {
+      throw Object.assign(new Error('Registration is closed on this server.'), { status: 403 });
+    }
     
     // Check if user exists
     const existingUser = await User.findOne({
@@ -14,7 +26,7 @@ class AuthService {
     });
     
     if (existingUser) {
-      throw new Error('User with this email or username already exists');
+      throw Object.assign(new Error('User with this email or username already exists'), { status: 409 });
     }
     
     // Hash password

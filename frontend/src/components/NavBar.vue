@@ -2,63 +2,62 @@
   <nav class="navbar">
     <div class="navbar-content">
       <div class="navbar-left">
-        <button 
-          class="hamburger-btn" 
+        <button
+          class="hamburger-btn"
           @click="toggleMenu"
           :aria-label="isMenuOpen ? 'Close menu' : 'Open menu'"
           :aria-expanded="isMenuOpen"
         >
-          <span class="hamburger-icon">
-            <span></span>
-            <span></span>
-            <span></span>
-          </span>
+          <AppIcon :name="isMenuOpen ? 'x' : 'menu'" :size="22" />
         </button>
-        <router-link class="home-link"to="/" @click="closeMenu">
-          <h1>🎸 Gear Tracker</h1>
+        <router-link class="home-link" to="/" @click="closeMenu">
+          <span class="mark" aria-hidden="true">GT</span>
+          <span class="wordmark">Gear Tracker</span>
         </router-link>
       </div>
-      
+
       <div class="nav-links" :class="{ 'nav-open': isMenuOpen }">
-        <router-link to="/" @click="closeMenu">Dashboard</router-link>
-        <router-link to="/items" @click="closeMenu">Items</router-link>
-        <router-link to="/for-sale" @click="closeMenu">For Sale</router-link>
-        <router-link to="/bundles" @click="closeMenu">Bundles</router-link>
-        <router-link to="/categories" @click="closeMenu">Categories</router-link>
+        <router-link to="/" @click="closeMenu" exact-active-class="active">Dashboard</router-link>
+        <router-link to="/items" @click="closeMenu" :class="{ active: section === 'items' }">Items</router-link>
+        <router-link to="/for-sale" @click="closeMenu" active-class="active">For sale</router-link>
+        <router-link to="/bundles" @click="closeMenu" active-class="active">Bundles</router-link>
+        <router-link to="/categories" @click="closeMenu" active-class="active">Categories</router-link>
         <div class="nav-bottom-actions">
-          <router-link to="/settings" @click="closeMenu" class="settings-link" title="Settings">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <router-link to="/settings" @click="closeMenu" class="icon-link" active-class="active" title="Settings">
+            <AppIcon name="settings" :size="19" /><span class="label-mobile">Settings</span>
           </router-link>
-          <button @click="handleLogout" class="btn btn-secondary">Logout</button>
+          <button @click="handleLogout" class="icon-link" title="Log out">
+            <AppIcon name="logout" :size="19" /><span class="label-mobile">Log out</span>
+          </button>
         </div>
       </div>
-      
-      <div 
-        class="nav-overlay" 
-        :class="{ 'overlay-visible': isMenuOpen }"
-        @click="closeMenu"
-      ></div>
+
+      <router-link to="/items/new" class="btn btn-primary btn-sm add-btn" @click="closeMenu">
+        <AppIcon name="plus" :size="16" /><span class="add-label">Add item</span>
+      </router-link>
+
+      <div class="nav-overlay" :class="{ 'overlay-visible': isMenuOpen }" @click="closeMenu"></div>
     </div>
   </nav>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import AppIcon from './AppIcon.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const isMenuOpen = ref(false)
 
+// /items/:id should highlight Items, but /items/new shouldn't steal it from nowhere.
+const section = computed(() => (route.path.startsWith('/items') ? 'items' : ''))
+
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
-  // Prevent body scroll when menu is open
-  if (isMenuOpen.value) {
-    document.body.style.overflow = 'hidden'
-  } else {
-    document.body.style.overflow = ''
-  }
+  document.body.style.overflow = isMenuOpen.value ? 'hidden' : ''
 }
 
 const closeMenu = () => {
@@ -75,230 +74,98 @@ const handleLogout = () => {
 
 <style scoped>
 .navbar {
-  background: white;
-  border-bottom: 1px solid var(--border-color);
-  padding: 1rem 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 1001;
 }
-
 .navbar-content {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 1rem;
+  height: 56px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   position: relative;
 }
+@media (min-width: 769px) { .navbar-content { padding: 0 2rem; height: 60px; } }
 
-.navbar-left {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+.navbar-left { display: flex; align-items: center; gap: 0.5rem; }
+.home-link {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  color: var(--text); text-decoration: none; font-weight: 700; letter-spacing: -0.01em;
 }
-
-.navbar h1 {
-  font-size: 1.25rem;
-  color: var(--text-primary);
-  margin: 0;
+.mark {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: var(--text); color: var(--bg);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.02em;
 }
+.wordmark { font-size: 1rem; }
 
 .hamburger-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  border-radius: 0.375rem;
-  transition: background-color 0.2s;
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; padding: 0; margin-left: -0.5rem;
+  background: none; border: none; cursor: pointer; border-radius: var(--radius-sm);
+  color: var(--text);
 }
+.hamburger-btn:hover { background: var(--surface-2); }
 
-.hamburger-btn:hover {
-  background-color: var(--background);
-}
+.add-btn { margin-left: auto; }
+@media (max-width: 420px) { .add-label { display: none; } .add-btn { width: 40px; padding: 0; } }
 
-.hamburger-btn:active {
-  background-color: var(--border-color);
-}
-
-.hamburger-icon {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  width: 24px;
-}
-
-.hamburger-icon span {
-  display: block;
-  height: 2px;
-  background-color: var(--text-primary);
-  border-radius: 2px;
-  transition: all 0.3s ease;
-}
-
-.home-link {
-  text-decoration: none;
-}
-
+/* Mobile: slide-in drawer */
 .nav-links {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
   position: fixed;
-  top: 0;
-  left: -100%;
-  width: 280px;
-  max-width: 85vw;
-  height: 100vh;
-  background: white;
-  flex-direction: column;
-  padding: 2rem 1rem;
-  padding-top: calc(73px + 2rem);
-  align-items: stretch;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
-  transition: left 0.3s ease;
-  overflow-y: auto;
+  top: 56px; left: 0; bottom: 0;
+  width: min(280px, 82vw);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 0.75rem;
+  gap: 0.15rem;
+  transform: translateX(-100%);
+  transition: transform 0.22s ease;
   z-index: 1002;
+  overflow-y: auto;
 }
-
-.nav-links.nav-open {
-  left: 0;
-}
-
-.nav-links a {
-  color: var(--text-secondary);
+.nav-links.nav-open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+.nav-links a, .icon-link {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
   text-decoration: none;
-  font-weight: 500;
-  font-size: 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.375rem;
-  transition: all 0.2s;
-  display: block;
+  font-weight: 550;
+  font-size: 0.95rem;
+  background: none; border: 0; cursor: pointer; text-align: left; width: 100%;
 }
-
-.nav-links a:hover {
-  background-color: var(--background);
-  color: var(--text-primary);
-}
-
-.nav-links a.router-link-active {
-  background-color: #DBEAFE;
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-.nav-bottom-actions {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  margin-top: auto;
-}
-
-.nav-bottom-actions .btn {
-  font-size: 1rem;
-  flex: 1;
-}
-
-.settings-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 0.375rem;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-}
-
-.settings-link:hover {
-  background-color: var(--background);
-  color: var(--text-primary);
-}
-
-.settings-link.router-link-active {
-  color: var(--primary-color);
-}
+.nav-links a:hover, .icon-link:hover { background: var(--surface-2); color: var(--text); }
+.nav-links a.active { color: var(--text); background: var(--surface-2); }
+.nav-bottom-actions { margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.15rem; }
 
 .nav-overlay {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
-  opacity: 0;
-  transition: opacity 0.3s ease;
+  position: fixed; top: 56px; left: 0; right: 0; bottom: 0;
+  background: rgba(20, 18, 15, 0.4);
+  opacity: 0; visibility: hidden; transition: opacity 0.2s;
+  z-index: 1001;
 }
+.nav-overlay.overlay-visible { opacity: 1; visibility: visible; }
 
-.nav-overlay.overlay-visible {
-  display: block;
-  opacity: 1;
-}
-
-@media (min-width: 769px) {
-  .hamburger-btn {
-    display: none;
-  }
-  
-  .navbar h1 {
-    font-size: 1.5rem;
-  }
-  
-  .navbar-content {
-    padding: 0 2rem;
-  }
-  
+/* Desktop: inline links */
+@media (min-width: 900px) {
+  .hamburger-btn, .nav-overlay { display: none; }
   .nav-links {
-    position: static;
-    width: auto;
-    max-width: none;
-    height: auto;
-    flex-direction: row;
-    padding: 0;
-    box-shadow: none;
-    background: transparent;
-    gap: 1.5rem;
+    position: static; transform: none; width: auto; padding: 0; border: 0;
+    flex-direction: row; align-items: center; background: none; gap: 0.15rem;
+    overflow: visible; margin-left: 1rem; flex: 1;
   }
-  
-  .nav-links a {
-    padding: 0.5rem;
-    font-size: 1rem;
-  }
-  
-  .nav-links a:hover {
-    background-color: transparent;
-  }
-  
-  .nav-links a.router-link-active {
-    background-color: transparent;
-  }
-  
-  .nav-bottom-actions {
-    margin-top: 0;
-    gap: 0.5rem;
-  }
-
-  .nav-bottom-actions .btn {
-    flex: initial;
-    font-size: 0.875rem;
-    padding: 0.5rem 0.75rem;
-  }
-
-  .settings-link {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .nav-overlay {
-    display: none !important;
-  }
+  .nav-links a { padding: 0.45rem 0.7rem; font-size: 0.875rem; width: auto; }
+  .nav-bottom-actions { margin: 0 0 0 auto; padding: 0; border-top: 0; flex-direction: row; }
+  .icon-link { width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .label-mobile { display: none; }
+  .add-btn { margin-left: 0.25rem; }
 }
 </style>

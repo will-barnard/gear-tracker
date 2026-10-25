@@ -3,6 +3,12 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, from, saved) {
+    if (saved) return saved
+    // Filter/sort changes on a list only touch the query; don't jump.
+    if (to.path === from.path) return false
+    return { top: 0 }
+  },
   routes: [
     {
       path: '/login',

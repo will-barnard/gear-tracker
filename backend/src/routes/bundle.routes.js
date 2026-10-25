@@ -1,18 +1,33 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
 const authMiddleware = require('../middleware/auth.middleware');
-const { Bundle, Item } = require('../models');
-const { Op } = require('sequelize');
+const { Bundle, Item, Attachment, sequelize } = require('../models');
+const costing = require('../services/costing');
+const att = require('../services/attachments');
+const { normalizeBundle } = require('../services/fields');
+const { httpError } = require('../services/http-error');
+const { enrich, belongsToIncludes } = require('./item.routes');
 
 const router = express.Router();
 
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  next();
-};
+const itemFk = (bundle) => (bundle.type === 'buy' ? 'purchaseBundleId' : 'saleBundleId');
+
+// Bundle + its items (with costing and covers) + stats + attachments.
+async function loadDetail(id, userId) {
+  const bundle = await Bundle.findOne({ where: { id, userId } });
+  if (!bundle) return null;
+  const ctx = await costing.loadContext(sequelize, userId);
+  const rows = await Item.findAll({
+    where: { [itemFk(bundle)]: bundle.id, userId },
+    include: belongsToIncludes,
+    order: [['name', 'ASC']]
+  });
+  const items = await enrich(rows, userId, { ctx });
+  const data = bundle.get({ plain: true });
+  data.items = items;
+  data.stats = costing.bundleStats(data, items, ctx);
+  data.attachments = await att.listFor('bundle', bundle.id);
+  return data;
+}
 
 // Get all bundles for user
 router.get('/', authMiddleware, async (req, res, next) => {
@@ -20,28 +35,23 @@ router.get('/', authMiddleware, async (req, res, next) => {
     const bundles = await Bundle.findAll({
       where: { userId: req.user.id },
       include: [
-        {
-          model: Item,
-          as: 'purchasedItems',
-          attributes: ['id', 'name', 'status', 'salePrice']
-        },
-        {
-          model: Item,
-          as: 'soldItems',
-          attributes: ['id', 'name', 'status', 'salePrice', 'purchasePrice']
-        }
+        { model: Item, as: 'purchasedItems', attributes: ['id', 'name', 'status'] },
+        { model: Item, as: 'soldItems', attributes: ['id', 'name', 'status'] }
       ],
       order: [['createdAt', 'DESC']]
     });
-    
-    // Flatten items based on bundle type for frontend compatibility
-    const bundlesWithItems = bundles.map(bundle => {
-      const bundleData = bundle.toJSON();
-      bundleData.items = bundle.type === 'buy' ? bundleData.purchasedItems : bundleData.soldItems;
-      return bundleData;
-    });
-    
-    res.json(bundlesWithItems);
+    const ctx = await costing.loadContext(sequelize, req.user.id);
+    const covers = await att.coversFor('bundle', bundles.map((b) => b.id));
+
+    res.json(bundles.map((bundle) => {
+      const data = bundle.toJSON();
+      data.items = bundle.type === 'buy' ? data.purchasedItems : data.soldItems;
+      delete data.purchasedItems;
+      delete data.soldItems;
+      data.allocation = bundle.type === 'buy' ? (ctx.buy.get(bundle.id)?.allocation || 'even') : null;
+      data.coverPhoto = covers.get(bundle.id) || null;
+      return data;
+    }));
   } catch (error) {
     next(error);
   }
@@ -50,146 +60,71 @@ router.get('/', authMiddleware, async (req, res, next) => {
 // Get single bundle
 router.get('/:id', authMiddleware, async (req, res, next) => {
   try {
-    const bundle = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    
-    if (!bundle) {
-      return res.status(404).json({ error: 'Bundle not found' });
-    }
-    
-    // Query items based on bundle type
-    const includeOptions = bundle.type === 'buy'
-      ? {
-          model: Item,
-          as: 'purchasedItems',
-          include: [
-            { model: require('../models').AdditionalCost, as: 'additionalCosts' }
-          ]
-        }
-      : {
-          model: Item,
-          as: 'soldItems',
-          include: [
-            { model: require('../models').AdditionalCost, as: 'additionalCosts' }
-          ]
-        };
-    
-    const bundleWithItems = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-      include: [includeOptions]
-    });
-    
-    // Flatten items based on bundle type for frontend compatibility
-    const bundleData = bundleWithItems.toJSON();
-    bundleData.items = bundle.type === 'buy' ? bundleData.purchasedItems : bundleData.soldItems;
-    
-    res.json(bundleData);
+    const data = await loadDetail(req.params.id, req.user.id);
+    if (!data) return res.status(404).json({ error: 'Bundle not found' });
+    res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Kept for anything still calling it; the detail response includes the same stats.
+router.get('/:id/stats', authMiddleware, async (req, res, next) => {
+  try {
+    const data = await loadDetail(req.params.id, req.user.id);
+    if (!data) return res.status(404).json({ error: 'Bundle not found' });
+    res.json(data.stats);
   } catch (error) {
     next(error);
   }
 });
 
 // Create bundle
-router.post('/',
-  authMiddleware,
-  [body('name').trim().notEmpty()],
-  validateRequest,
-  async (req, res, next) => {
-    try {
-      const bundle = await Bundle.create({
-        ...req.body,
-        userId: req.user.id
-      });
-      
-      res.status(201).json(bundle);
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// Update bundle
-router.put('/:id', authMiddleware, async (req, res, next) => {
+router.post('/', authMiddleware, async (req, res, next) => {
   try {
-    const bundle = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    
-    if (!bundle) {
-      return res.status(404).json({ error: 'Bundle not found' });
-    }
-    
-    await bundle.update(req.body);
-    
-    // If bundle is a 'buy' type and purchaseDate was updated, update all items in the bundle
-    if (bundle.type === 'buy' && req.body.purchaseDate) {
-      await Item.update(
-        { purchaseDate: req.body.purchaseDate },
-        { where: { purchaseBundleId: bundle.id } }
-      );
-    }
-    
-    // If bundle is a 'sell' type and saleDate was updated, update all items in the bundle
-    if (bundle.type === 'sell' && req.body.saleDate) {
-      await Item.update(
-        { saleDate: req.body.saleDate },
-        { where: { saleBundleId: bundle.id } }
-      );
-    }
-    
-    // Determine which association to include based on bundle type
-    const includeOptions = bundle.type === 'buy'
-      ? {
-          model: Item,
-          as: 'purchasedItems',
-          attributes: ['id', 'name', 'status', 'salePrice']
-        }
-      : {
-          model: Item,
-          as: 'soldItems',
-          attributes: ['id', 'name', 'status', 'salePrice', 'purchasePrice']
-        };
-    
-    const updatedBundle = await Bundle.findByPk(bundle.id, {
-      include: [includeOptions]
-    });
-    
-    // Flatten items for frontend compatibility
-    const bundleData = updatedBundle.toJSON();
-    bundleData.items = bundle.type === 'buy' ? bundleData.purchasedItems : bundleData.soldItems;
-    
-    res.json(bundleData);
+    const data = await normalizeBundle(req.body);
+    if (!data.name) throw httpError(400, 'Name is required');
+    const bundle = await Bundle.create({ ...data, userId: req.user.id });
+    res.status(201).json(await loadDetail(bundle.id, req.user.id));
   } catch (error) {
     next(error);
   }
 });
 
-// Delete bundle
+// Update bundle; its dates flow down to its items.
+router.put('/:id', authMiddleware, async (req, res, next) => {
+  try {
+    const bundle = await Bundle.findOne({ where: { id: req.params.id, userId: req.user.id } });
+    if (!bundle) return res.status(404).json({ error: 'Bundle not found' });
+    const data = await normalizeBundle(req.body, { existing: bundle });
+
+    await sequelize.transaction(async (transaction) => {
+      await bundle.update(data, { transaction });
+      if (bundle.type === 'buy' && 'purchaseDate' in data && data.purchaseDate) {
+        await Item.update({ purchaseDate: data.purchaseDate }, { where: { purchaseBundleId: bundle.id }, transaction });
+      }
+      if (bundle.type === 'sell' && 'saleDate' in data && data.saleDate) {
+        await Item.update({ saleDate: data.saleDate }, { where: { saleBundleId: bundle.id }, transaction });
+      }
+    });
+
+    res.json(await loadDetail(bundle.id, req.user.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete bundle (only when empty) and its stored files.
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
-    const bundle = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-      include: [
-        { model: Item, as: 'purchasedItems' },
-        { model: Item, as: 'soldItems' }
-      ]
-    });
-    
-    if (!bundle) {
-      return res.status(404).json({ error: 'Bundle not found' });
+    const bundle = await Bundle.findOne({ where: { id: req.params.id, userId: req.user.id } });
+    if (!bundle) return res.status(404).json({ error: 'Bundle not found' });
+    const itemCount = await Item.count({ where: { [itemFk(bundle)]: bundle.id } });
+    if (itemCount > 0) {
+      throw httpError(400, 'Cannot delete a bundle with items. Remove or reassign its items first.');
     }
-    
-    // Check if bundle has items
-    const hasItems = (bundle.purchasedItems && bundle.purchasedItems.length > 0) || 
-                     (bundle.soldItems && bundle.soldItems.length > 0);
-    
-    if (hasItems) {
-      return res.status(400).json({ 
-        error: 'Cannot delete bundle with items. Please remove or reassign items first.' 
-      });
-    }
-    
+    const files = await Attachment.findAll({ where: { bundleId: bundle.id } });
+    await att.destroyAttachments(files);
     await bundle.destroy();
     res.status(204).send();
   } catch (error) {
@@ -197,159 +132,46 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   }
 });
 
-// Rebalance item cost basis by expected sale price weights
+// Weight each item's share of the bundle cost by its sale price (actual if
+// sold, expected otherwise). Stores weights, not dollars, so the split keeps
+// tracking the bundle price if that changes later.
 router.post('/:id/rebalance', authMiddleware, async (req, res, next) => {
   try {
-    const bundle = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id }
-    });
+    const bundle = await Bundle.findOne({ where: { id: req.params.id, userId: req.user.id } });
+    if (!bundle) return res.status(404).json({ error: 'Bundle not found' });
+    if (bundle.type !== 'buy') throw httpError(400, 'Rebalancing is only supported for buy bundles');
 
-    if (!bundle) {
-      return res.status(404).json({ error: 'Bundle not found' });
-    }
+    const items = await Item.findAll({ where: { purchaseBundleId: bundle.id, userId: req.user.id } });
+    if (!items.length) throw httpError(400, 'Bundle has no items to rebalance');
 
-    if (bundle.type !== 'buy') {
-      return res.status(400).json({ error: 'Rebalancing is only supported for buy bundles' });
-    }
-
-    const bundleWithItems = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-      include: [{
-        model: Item,
-        as: 'purchasedItems'
-      }]
-    });
-
-    const items = bundleWithItems.purchasedItems;
-
-    if (!items || items.length === 0) {
-      return res.status(400).json({ error: 'Bundle has no items to rebalance' });
-    }
-
-    // Use expectedSalePrice for owned items, salePrice for sold items
-    const prices = items.map(item => {
-      if (item.status === 'sold') {
-        return { id: item.id, price: parseFloat(item.salePrice || 0) };
-      }
-      return { id: item.id, price: parseFloat(item.expectedSalePrice || 0) };
-    });
-
-    const missingPrices = prices.filter(p => p.price <= 0);
-    if (missingPrices.length > 0) {
-      return res.status(400).json({
-        error: 'All items must have an expected sale price (or actual sale price if sold) before rebalancing'
-      });
-    }
-
-    const totalExpected = prices.reduce((sum, p) => sum + p.price, 0);
-    const bundleCost = parseFloat(bundle.purchasePrice || 0);
-
-    // Update each item's purchasePrice based on its weight
-    await Promise.all(prices.map(p => {
-      const weight = p.price / totalExpected;
-      const newCost = Math.round(bundleCost * weight * 100) / 100;
-      return Item.update(
-        { purchasePrice: newCost },
-        { where: { id: p.id, userId: req.user.id } }
-      );
+    const weights = items.map((item) => ({
+      item,
+      weight: Number(item.status === 'sold' ? item.salePrice : item.expectedSalePrice) || 0
     }));
+    const missing = weights.filter((w) => w.weight <= 0).map((w) => w.item.name);
+    if (missing.length) {
+      throw httpError(400, `Every item needs an expected sale price (or its sale price, if sold) before rebalancing. Missing: ${missing.join(', ')}`);
+    }
 
-    // Return updated bundle with items
-    const updatedBundle = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-      include: [{
-        model: Item,
-        as: 'purchasedItems',
-        include: [{ model: require('../models').AdditionalCost, as: 'additionalCosts' }]
-      }]
+    await sequelize.transaction(async (transaction) => {
+      for (const { item, weight } of weights) {
+        await item.update({ costWeight: weight }, { transaction });
+      }
     });
 
-    const bundleData = updatedBundle.toJSON();
-    bundleData.items = bundleData.purchasedItems;
-
-    res.json(bundleData);
+    res.json(await loadDetail(bundle.id, req.user.id));
   } catch (error) {
     next(error);
   }
 });
 
-// Get bundle statistics
-router.get('/:id/stats', authMiddleware, async (req, res, next) => {
+// Back to an even split.
+router.delete('/:id/rebalance', authMiddleware, async (req, res, next) => {
   try {
-    const bundle = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    
-    if (!bundle) {
-      return res.status(404).json({ error: 'Bundle not found' });
-    }
-    
-    // Query items based on bundle type
-    const includeOptions = bundle.type === 'buy' 
-      ? { model: Item, as: 'purchasedItems', include: [{ model: require('../models').AdditionalCost, as: 'additionalCosts' }] }
-      : { model: Item, as: 'soldItems', include: [{ model: require('../models').AdditionalCost, as: 'additionalCosts' }] };
-    
-    const bundleWithItems = await Bundle.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-      include: [includeOptions]
-    });
-    
-    const items = bundle.type === 'buy' ? bundleWithItems.purchasedItems : bundleWithItems.soldItems;
-    const totalItems = items.length;
-    const ownedItems = items.filter(item => item.status === 'owned').length;
-    const soldItems = items.filter(item => item.status === 'sold').length;
-    
-    const totalAdditionalCosts = items.reduce((sum, item) => {
-      const itemCosts = item.additionalCosts?.reduce((s, c) => {
-        const amount = parseFloat(c.amount || 0);
-        return s + (c.type === 'income' ? -amount : amount);
-      }, 0) || 0;
-      return sum + itemCosts;
-    }, 0);
-    
-    let costPerItem = 0;
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let totalProfit = 0;
-    
-    if (bundle.type === 'buy') {
-      // Check if items have been rebalanced (individual purchasePrice set)
-      const hasRebalancedWeights = items.some(item => item.purchasePrice != null && parseFloat(item.purchasePrice) > 0);
-      costPerItem = totalItems > 0 ? parseFloat(bundle.purchasePrice || 0) / totalItems : 0;
-      totalRevenue = items
-        .filter(item => item.status === 'sold')
-        .reduce((sum, item) => sum + parseFloat(item.salePrice || 0), 0);
-      if (hasRebalancedWeights) {
-        // Use individual rebalanced costs for sold items
-        const soldCost = items
-          .filter(item => item.status === 'sold')
-          .reduce((sum, item) => sum + parseFloat(item.purchasePrice || 0), 0);
-        totalCost = soldCost + totalAdditionalCosts;
-      } else {
-        totalCost = costPerItem * soldItems + totalAdditionalCosts;
-      }
-      totalProfit = totalRevenue - totalCost;
-    } else {
-      // Sell bundle: sum item costs, bundle sale price is revenue
-      totalCost = items.reduce((sum, item) => 
-        sum + parseFloat(item.purchasePrice || 0), 0) + totalAdditionalCosts;
-      totalRevenue = parseFloat(bundle.salePrice || 0);
-      totalProfit = totalRevenue - totalCost;
-      costPerItem = totalItems > 0 ? totalCost / totalItems : 0;
-    }
-    
-    res.json({
-      totalItems,
-      ownedItems,
-      soldItems,
-      totalRevenue,
-      costPerItem,
-      totalCost,
-      totalAdditionalCosts,
-      totalProfit,
-      bundleType: bundle.type,
-      isComplete: bundle.type === 'buy' ? (ownedItems === 0 && totalItems > 0) : (bundle.status === 'complete')
-    });
+    const bundle = await Bundle.findOne({ where: { id: req.params.id, userId: req.user.id } });
+    if (!bundle) return res.status(404).json({ error: 'Bundle not found' });
+    await Item.update({ costWeight: null }, { where: { purchaseBundleId: bundle.id, userId: req.user.id } });
+    res.json(await loadDetail(bundle.id, req.user.id));
   } catch (error) {
     next(error);
   }

@@ -1,171 +1,88 @@
 <template>
-  <div class="register-container">
-    <div class="register-card card">
-      <h1>Create Account</h1>
-      
-      <form @submit.prevent="handleRegister">
+  <AuthShell title="Create your account">
+    <div v-if="open === null" class="loading-block"><div class="spinner"></div></div>
+
+    <template v-else-if="!open">
+      <p class="muted">Sign-up is closed on this server — it already has its owner account.</p>
+      <router-link to="/login" class="btn btn-primary btn-block" style="margin-top: 1.25rem">Go to log in</router-link>
+    </template>
+
+    <form v-else @submit.prevent="handleRegister">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input v-model="formData.email" type="email" class="form-input" autocomplete="email" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input v-model="formData.username" type="text" class="form-input" autocomplete="username" minlength="3" required />
+      </div>
+      <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Email</label>
-          <input
-            v-model="formData.email"
-            type="email"
-            class="form-input"
-            required
-          />
+          <label class="form-label">First name</label>
+          <input v-model="formData.firstName" type="text" class="form-input" autocomplete="given-name" />
         </div>
-        
         <div class="form-group">
-          <label class="form-label">Username</label>
-          <input
-            v-model="formData.username"
-            type="text"
-            class="form-input"
-            required
-            minlength="3"
-          />
+          <label class="form-label">Last name</label>
+          <input v-model="formData.lastName" type="text" class="form-input" autocomplete="family-name" />
         </div>
-        
-        <div class="form-group">
-          <label class="form-label">First Name</label>
-          <input
-            v-model="formData.firstName"
-            type="text"
-            class="form-input"
-          />
-        </div>
-        
-        <div class="form-group">
-          <label class="form-label">Last Name</label>
-          <input
-            v-model="formData.lastName"
-            type="text"
-            class="form-input"
-          />
-        </div>
-        
-        <div class="form-group">
-          <label class="form-label">Password</label>
-          <input
-            v-model="formData.password"
-            type="password"
-            class="form-input"
-            required
-            minlength="6"
-          />
-        </div>
-        
-        <div class="form-group">
-          <label class="form-label">Confirm Password</label>
-          <input
-            v-model="confirmPassword"
-            type="password"
-            class="form-input"
-            required
-          />
-        </div>
-        
-        <div v-if="error" class="error-message">
-          {{ error }}
-        </div>
-        
-        <button type="submit" class="btn btn-primary" :disabled="loading">
-          {{ loading ? 'Creating account...' : 'Register' }}
-        </button>
-      </form>
-      
-      <p class="login-link">
-        Already have an account? <router-link to="/login">Login</router-link>
-      </p>
-    </div>
-  </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input v-model="formData.password" type="password" class="form-input" autocomplete="new-password" minlength="6" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm password</label>
+        <input v-model="confirmPassword" type="password" class="form-input" autocomplete="new-password" required />
+      </div>
+      <div v-if="error" class="alert alert-error">{{ error }}</div>
+      <button type="submit" class="btn btn-primary btn-block" :disabled="loading">
+        {{ loading ? 'Creating account…' : 'Create account' }}
+      </button>
+      <p class="foot">The first account on this server is the owner; sign-up closes after it.</p>
+    </form>
+    <p v-if="open" class="foot">Already have an account? <router-link to="/login">Log in</router-link></p>
+  </AuthShell>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import AuthShell from '@/components/AuthShell.vue'
+import api from '@/services/api'
+import { errorMessage } from '@/utils/format'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-const formData = ref({
-  email: '',
-  username: '',
-  firstName: '',
-  lastName: '',
-  password: ''
-})
+const formData = ref({ email: '', username: '', firstName: '', lastName: '', password: '' })
 const confirmPassword = ref('')
 const error = ref('')
 const loading = ref(false)
+const open = ref(null)
 
 const handleRegister = async () => {
   error.value = ''
-  
   if (formData.value.password !== confirmPassword.value) {
-    error.value = 'Passwords do not match'
+    error.value = "Passwords don't match"
     return
   }
-  
   loading.value = true
-  
   try {
     await authStore.register(formData.value)
     router.push('/')
   } catch (err) {
-    error.value = err.response?.data?.error || 'Registration failed'
+    error.value = errorMessage(err, 'Registration failed')
   } finally {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  try {
+    open.value = (await api.get('/auth/registration')).data.open
+  } catch {
+    open.value = true // let the server decide on submit
+  }
+})
 </script>
-
-<style scoped>
-.register-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  padding: 1rem;
-}
-
-.register-card {
-  width: 100%;
-  max-width: 500px;
-}
-
-.register-card h1 {
-  margin-bottom: 1.5rem;
-  text-align: center;
-  color: var(--text-primary);
-}
-
-.error-message {
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  background-color: #FEE2E2;
-  color: #DC2626;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-}
-
-.btn {
-  width: 100%;
-  margin-top: 0.5rem;
-}
-
-.login-link {
-  margin-top: 1rem;
-  text-align: center;
-  font-size: 0.875rem;
-}
-
-.login-link a {
-  color: var(--primary-color);
-  text-decoration: none;
-}
-
-.login-link a:hover {
-  text-decoration: underline;
-}
-</style>

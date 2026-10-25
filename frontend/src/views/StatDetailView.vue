@@ -1,7 +1,7 @@
 <template>
   <div class="stat-detail">
     <NavBar />
-    <div class="container">
+    <div class="page">
       <StatPageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
       <div v-if="loading" class="loading-container">
@@ -96,7 +96,7 @@ const forSaleItems = computed(() => allItems.value.filter(i => i.status === 'for
 // ── Page header ─────────────────────────────────────
 const pageTitle = computed(() => ({
   'inventory': 'Current Inventory',
-  'collection-value': 'Collection Value',
+  'collection-value': 'Collection value',
   'sales': 'Completed Sales',
   'revenue': 'Sales Revenue',
   'profit': 'Profit & Loss',
@@ -108,9 +108,9 @@ const pageTitle = computed(() => ({
 
 const pageSubtitle = computed(() => ({
   'inventory': 'Items currently in your collection',
-  'collection-value': 'Total invested in owned items over time',
+  'collection-value': 'Owned items at your estimated value (cost where there\'s no estimate)',
   'sales': 'History of completed sales',
-  'revenue': 'Total revenue earned from sales',
+  'revenue': 'What sales brought in, after fees and shipping',
   'profit': 'Net profit or loss across all completed sales',
   'for-sale': 'Items currently listed or waiting to be sold',
   'for-sale-investment': 'Total cost basis of items you\'re selling',
@@ -124,11 +124,11 @@ const highlight = computed(() => {
     case 'inventory':
       return { value: ownedItems.value.length, label: 'Items Owned', format: 'number', color: 'default' }
     case 'collection-value':
-      return { value: sumField(ownedItems.value, 'effectiveCost'), label: 'Collection Value', format: 'currency', color: 'default' }
+      return { value: sumField(ownedItems.value, 'currentValue'), label: 'Estimated value', format: 'currency', color: 'default' }
     case 'sales':
       return { value: soldItems.value.length, label: 'Items Sold', format: 'number', color: 'default' }
     case 'revenue':
-      return { value: sumField(soldItems.value, 'effectiveSalePrice'), label: 'Total Revenue', format: 'currency', color: 'default' }
+      return { value: sumField(soldItems.value, 'effectiveSalePrice'), label: 'Net revenue', format: 'currency', color: 'default' }
     case 'profit': {
       const p = sumField(soldItems.value, 'effectiveSalePrice') - sumField(soldItems.value, 'effectiveCost')
       return { value: p, label: 'Net Profit / Loss', format: 'signed-currency', color: 'auto' }
@@ -140,7 +140,8 @@ const highlight = computed(() => {
     case 'listings':
       return { value: forSaleItems.value.filter(i => i.isListedOnline).length, label: 'Listed Online', format: 'number', color: 'default' }
     case 'projected-profit': {
-      const pp = forSaleItems.value.reduce((s, i) => s + i.effectiveSalePrice - i.effectiveCost, 0)
+      // Only priced items: an item with no asking price has no projected profit (not −cost).
+      const pp = forSaleItems.value.reduce((s, i) => s + (i.profit || 0), 0)
       return { value: pp, label: 'Projected Profit', format: 'signed-currency', color: 'auto' }
     }
     default:
@@ -153,14 +154,15 @@ const extraHighlights = computed(() => {
   switch (statType.value) {
     case 'inventory':
       return [
-        { value: sumField(ownedItems.value, 'effectiveCost'), label: 'Total Value', format: 'currency', color: 'default' },
-        { value: ownedItems.value.length ? sumField(ownedItems.value, 'effectiveCost') / ownedItems.value.length : 0, label: 'Avg Item Value', format: 'currency', color: 'default' }
+        { value: sumField(ownedItems.value, 'effectiveCost'), label: 'Cost basis', format: 'currency', color: 'default' },
+        { value: ownedItems.value.length ? sumField(ownedItems.value, 'effectiveCost') / ownedItems.value.length : 0, label: 'Avg cost / item', format: 'currency', color: 'default' }
       ]
     case 'collection-value': {
-      const costs = ownedItems.value.map(i => i.effectiveCost)
+      const cost = sumField(ownedItems.value, 'effectiveCost')
+      const value = sumField(ownedItems.value, 'currentValue')
       return [
-        { value: costs.length ? Math.max(...costs) : 0, label: 'Highest Value Item', format: 'currency', color: 'default' },
-        { value: costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : 0, label: 'Average Value', format: 'currency', color: 'default' }
+        { value: cost, label: 'Cost basis', format: 'currency', color: 'default' },
+        { value: value - cost, label: 'Unrealized gain', format: 'signed-currency', color: 'auto' }
       ]
     }
     case 'sales':
@@ -271,7 +273,7 @@ const timeSeriesChartData = computed(() => {
 
 const timeSeriesTitle = computed(() => ({
   'inventory': 'Inventory Count Over Time',
-  'collection-value': 'Collection Value Over Time',
+  'collection-value': 'Cost basis over time',
   'sales': 'Sales Over Time',
   'revenue': 'Cumulative Revenue',
   'profit': 'Cumulative Profit / Loss'
@@ -291,7 +293,7 @@ const breakdownChartData = computed(() => {
       break
     case 'collection-value':
       items = ownedItems.value
-      valueFn = (i) => i.effectiveCost
+      valueFn = (i) => i.currentValue || 0
       break
     case 'sales':
       items = soldItems.value
@@ -325,8 +327,8 @@ const breakdownChartData = computed(() => {
       )
     }
     case 'projected-profit':
-      items = forSaleItems.value
-      valueFn = (i) => i.effectiveSalePrice - i.effectiveCost
+      items = forSaleItems.value.filter(i => i.profit != null)
+      valueFn = (i) => i.profit
       break
     default:
       return null
@@ -388,9 +390,9 @@ const tableColumns = computed(() => {
       return [
         { key: 'name', label: 'Name' },
         { key: 'category.name', label: 'Category' },
-        { key: 'effectiveCost', label: 'Total Cost', format: 'currency' },
-        { key: 'purchasePrice', label: 'Purchase Price', format: 'currency' },
-        { key: 'additionalCostTotal', label: 'Add\'l Costs', format: 'currency' }
+        { key: 'currentValue', label: 'Value', format: 'currency' },
+        { key: 'effectiveCost', label: 'Cost', format: 'currency' },
+        { key: '_unrealized', label: 'Gain', format: 'signed-currency' }
       ]
     case 'sales':
       return [
@@ -452,7 +454,7 @@ const tableColumns = computed(() => {
 
 const tableTitle = computed(() => ({
   'inventory': 'Owned Items',
-  'collection-value': 'Items by Value',
+  'collection-value': 'Items by value',
   'sales': 'Sold Items',
   'revenue': 'Sales by Revenue',
   'profit': 'Deals by Profit',
@@ -464,7 +466,7 @@ const tableTitle = computed(() => ({
 
 const tableSortKey = computed(() => ({
   'inventory': 'purchaseDate',
-  'collection-value': 'effectiveCost',
+  'collection-value': 'currentValue',
   'sales': 'saleDate',
   'revenue': 'effectiveSalePrice',
   'profit': '_profit',
@@ -485,8 +487,9 @@ function sumField(items, field) {
 const enrichedTableItems = computed(() => {
   return tableItems.value.map(item => ({
     ...item,
-    _profit: item.effectiveSalePrice - item.effectiveCost,
-    _projectedProfit: item.effectiveSalePrice - item.effectiveCost
+    _profit: item.profit ?? 0,
+    _projectedProfit: item.profit,
+    _unrealized: (item.currentValue || 0) - item.effectiveCost
   }))
 })
 
@@ -510,24 +513,6 @@ watch(statType, loadData)
 </script>
 
 <style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem 0.75rem;
-}
-
-@media (min-width: 480px) {
-  .container {
-    padding: 1.25rem 1rem;
-  }
-}
-
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
-
 .highlights-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

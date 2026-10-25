@@ -1,10 +1,9 @@
 <template>
-  <div class="items-view">
+  <div>
     <NavBar />
-    
-    <div class="container">
+    <main class="page">
       <ItemsList title="Items" />
-    </div>
+    </main>
   </div>
 </template>
 
@@ -12,17 +11,3 @@
 import NavBar from '@/components/NavBar.vue'
 import ItemsList from '@/components/ItemsList.vue'
 </script>
-
-<style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
-}
-
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
-</style>

@@ -1,85 +1,132 @@
 <template>
-  <div class="settings-view">
+  <div>
     <NavBar />
-    
-    <div class="container">
-      <h2>Settings</h2>
+    <main class="page settings-page">
+      <div class="page-header"><h2>Settings</h2></div>
 
-      <div class="card settings-card">
-        <h3>Download Data</h3>
-        <p>Export all your items, categories, bundles, and additional costs as a JSON file.</p>
-        <button @click="downloadData" class="btn btn-primary" :disabled="exporting">
-          {{ exporting ? 'Exporting...' : 'Download Data' }}
-        </button>
-        <p v-if="exportError" class="error-message">{{ exportError }}</p>
-      </div>
-
-      <div class="card settings-card">
-        <h3>Upload Data</h3>
-        <p>Import data from a previously exported JSON file. Categories and bundles with matching names will be skipped. Items are always added.</p>
-        <div class="upload-area">
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".json"
-            class="file-input"
-            @change="handleFileSelect"
-          />
-          <button @click="$refs.fileInput.click()" class="btn btn-secondary">
-            Choose File
+      <section class="card">
+        <div class="card-head">
+          <h3><AppIcon name="database" :size="17" /> Backups</h3>
+          <button v-if="sys?.configured" class="btn btn-secondary btn-sm" :disabled="backingUp" @click="backupNow">
+            {{ backingUp ? 'Backing up…' : 'Back up now' }}
           </button>
-          <span class="file-name" v-if="selectedFile">{{ selectedFile.name }}</span>
         </div>
-        <button
-          @click="uploadData"
-          class="btn btn-primary"
-          :disabled="!selectedFile || importing"
-          style="margin-top: 0.75rem;"
-        >
-          {{ importing ? 'Importing...' : 'Upload Data' }}
-        </button>
-        <p v-if="importError" class="error-message">{{ importError }}</p>
-        <div v-if="importResult" class="success-message">
-          <strong>Import complete!</strong>
-          <ul>
-            <li>{{ importResult.categories }} categories added<span v-if="importResult.categoriesSkipped">, {{ importResult.categoriesSkipped }} already existed</span></li>
-            <li>{{ importResult.bundles }} bundles added<span v-if="importResult.bundlesSkipped">, {{ importResult.bundlesSkipped }} already existed</span></li>
-            <li>{{ importResult.items }} items added</li>
-            <li>{{ importResult.additionalCosts }} additional costs added</li>
+        <div v-if="sysLoading" class="small muted">Checking…</div>
+        <template v-else-if="sys">
+          <p v-if="sys.configured" class="small muted">
+            Every night at {{ hourLabel }} ({{ sys.timezone }}) the whole database is dumped to brew-bucket's <code>{{ sys.bucket }}</code> bucket, which keeps 90 days.
+          </p>
+          <p v-else class="alert alert-warn">
+            Nightly backups are off. Set <code>BACKUP_BREW_BUCKET_KEY</code> on the backend (a brew-bucket key with read + write on the <code>backups</code> bucket) to turn them on.
+          </p>
+          <div v-if="sys.last && !sys.last.ok" class="alert alert-error" style="margin-top: 0.75rem">Last attempt failed: {{ sys.last.error }}</div>
+          <div v-if="sys.listError" class="alert alert-warn" style="margin-top: 0.75rem">{{ sys.listError }}</div>
+          <ul v-if="sys.recent?.length" class="backup-list">
+            <li v-for="b in sys.recent" :key="b.key">
+              <span class="mono small">{{ b.key.split('/').pop() }}</span>
+              <span class="small faint">{{ fileSize(b.size) }}</span>
+            </li>
           </ul>
+        </template>
+        <p v-else class="small muted">Only the owner account can see backups.</p>
+      </section>
+
+      <section class="card">
+        <h3><AppIcon name="image" :size="17" /> File storage</h3>
+        <p v-if="sys?.storage?.configured" class="small muted">
+          Photos and files are stored in brew-bucket (<code>{{ sys.storage.bucket }}/{{ sys.storage.prefix }}/</code>). If the NAS is asleep, images show as blank and uploads ask you to retry.
+        </p>
+        <p v-else-if="sys" class="alert alert-warn">
+          Uploads are off. Set <code>BREW_BUCKET_URL</code> and <code>BREW_BUCKET_KEY</code> (read, write and delete on the <code>uploads</code> bucket) on the backend.
+        </p>
+      </section>
+
+      <section class="card">
+        <h3><AppIcon name="download" :size="17" /> Export</h3>
+        <p class="small muted">All items, categories, bundles and costs as JSON, plus a list of attached files. The files themselves stay in brew-bucket.</p>
+        <button @click="downloadData" class="btn btn-secondary" :disabled="exporting" style="margin-top: 0.85rem">
+          {{ exporting ? 'Exporting…' : 'Download export' }}
+        </button>
+      </section>
+
+      <section class="card">
+        <h3><AppIcon name="upload" :size="17" /> Import</h3>
+        <p class="small muted">Load a previous export. Categories and bundles with matching names are reused; items are always added (so importing the same file twice duplicates them). Files aren't restored.</p>
+        <div class="upload-row">
+          <input ref="fileInput" type="file" accept=".json,application/json" hidden @change="handleFileSelect" />
+          <button @click="fileInput.click()" class="btn btn-secondary">Choose file</button>
+          <span v-if="selectedFile" class="small">{{ selectedFile.name }}</span>
+          <button v-if="selectedFile" @click="uploadData" class="btn btn-primary" :disabled="importing">{{ importing ? 'Importing…' : 'Import' }}</button>
         </div>
-      </div>
-    </div>
+        <div v-if="importError" class="alert alert-error" style="margin-top: 0.75rem">{{ importError }}</div>
+        <div v-if="importResult" class="alert alert-success" style="margin-top: 0.75rem">
+          Imported {{ importResult.items }} items, {{ importResult.additionalCosts }} costs, {{ importResult.categories }} new categories and {{ importResult.bundles }} new bundles.
+        </div>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import NavBar from '@/components/NavBar.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import api from '@/services/api'
+import { fileSize, errorMessage } from '@/utils/format'
+import { toastError, toastSuccess } from '@/composables/useNotify'
 
+const sys = ref(null)
+const sysLoading = ref(true)
+const backingUp = ref(false)
 const exporting = ref(false)
-const exportError = ref('')
 const selectedFile = ref(null)
 const importing = ref(false)
 const importError = ref('')
 const importResult = ref(null)
 const fileInput = ref(null)
 
+const hourLabel = computed(() => {
+  const h = sys.value?.hour ?? 3
+  return new Date(2000, 0, 1, h).toLocaleTimeString('en-US', { hour: 'numeric' })
+})
+
+async function loadSys() {
+  try {
+    sys.value = (await api.get('/data/backups')).data
+  } catch (err) {
+    if (err.response?.status !== 403) toastError(errorMessage(err, "Couldn't check backup status"))
+  } finally {
+    sysLoading.value = false
+  }
+}
+
+async function backupNow() {
+  backingUp.value = true
+  try {
+    await api.post('/data/backups')
+    toastSuccess('Backup saved')
+    await loadSys()
+  } catch (err) {
+    toastError(errorMessage(err, 'Backup failed'))
+  } finally {
+    backingUp.value = false
+  }
+}
+
 const downloadData = async () => {
   exporting.value = true
-  exportError.value = ''
   try {
     const response = await api.get('/data/export')
     const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gear-tracker-export-${new Date().toISOString().split('T')[0]}.json`
+    const d = new Date()
+    a.download = `gear-tracker-export-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`
     a.click()
     URL.revokeObjectURL(url)
-  } catch (error) {
-    exportError.value = error.response?.data?.error || 'Failed to export data'
+  } catch (err) {
+    toastError(errorMessage(err, 'Failed to export data'))
   } finally {
     exporting.value = false
   }
@@ -96,99 +143,36 @@ const uploadData = async () => {
   importing.value = true
   importError.value = ''
   importResult.value = null
-
   try {
-    const text = await selectedFile.value.text()
     let data
     try {
-      data = JSON.parse(text)
+      data = JSON.parse(await selectedFile.value.text())
     } catch {
-      importError.value = 'Invalid JSON file'
+      importError.value = "That file isn't valid JSON"
       return
     }
     const response = await api.post('/data/import', data)
     importResult.value = response.data.stats
     selectedFile.value = null
     if (fileInput.value) fileInput.value.value = ''
-  } catch (error) {
-    importError.value = error.response?.data?.error || 'Failed to import data'
+  } catch (err) {
+    importError.value = errorMessage(err, 'Failed to import data')
   } finally {
     importing.value = false
   }
 }
+
+onMounted(loadSys)
 </script>
 
 <style scoped>
-.container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
-}
-
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
-
-h2 {
-  margin-bottom: 1.5rem;
-}
-
-.settings-card {
-  margin-bottom: 1.5rem;
-}
-
-.settings-card h3 {
-  margin-bottom: 0.5rem;
-}
-
-.settings-card p {
-  color: var(--text-secondary);
-  margin-bottom: 0.75rem;
-  font-size: 0.875rem;
-}
-
-.upload-area {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.file-input {
-  display: none;
-}
-
-.file-name {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  word-break: break-all;
-}
-
-.error-message {
-  padding: 0.75rem;
-  background-color: #FEE2E2;
-  color: #DC2626;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  margin-top: 0.75rem;
-}
-
-.success-message {
-  padding: 0.75rem;
-  background-color: #D1FAE5;
-  color: #065F46;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  margin-top: 0.75rem;
-}
-
-.success-message ul {
-  margin: 0.5rem 0 0 1.25rem;
-  padding: 0;
-}
-
-.success-message li {
-  margin-bottom: 0.25rem;
-}
+.settings-page { max-width: 760px; }
+.settings-page .card { margin-bottom: 1rem; }
+.settings-page h3 { display: flex; align-items: center; gap: 0.5rem; }
+.card-head h3 { margin: 0; }
+code { font-family: var(--font-mono); font-size: 0.8em; background: var(--surface-2); padding: 0.05rem 0.3rem; border-radius: 4px; }
+.mono { font-family: var(--font-mono); }
+.upload-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.85rem; }
+.backup-list { margin-top: 0.75rem; border-top: 1px solid var(--border); }
+.backup-list li { display: flex; justify-content: space-between; padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
 </style>

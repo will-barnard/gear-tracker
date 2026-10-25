@@ -14,6 +14,15 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
+// Whether the register page should offer signup.
+router.get('/registration', async (req, res, next) => {
+  try {
+    res.json({ open: await authService.registrationOpen() });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Register
 router.post('/register',
   [

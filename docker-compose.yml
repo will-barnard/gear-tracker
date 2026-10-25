@@ -35,6 +35,16 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN}
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Chicago}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      # Photos, receipts, PDFs → brew-bucket. Key: read/write/delete on uploads only.
+      BREW_BUCKET_URL: ${BREW_BUCKET_URL:-}
+      BREW_BUCKET_KEY: ${BREW_BUCKET_KEY:-}
+      BREW_BUCKET_BUCKET: ${BREW_BUCKET_BUCKET:-uploads}
+      ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-25}
+      # Nightly pg_dump → brew-bucket. Key: read/write on backups only.
+      BACKUP_BREW_BUCKET_KEY: ${BACKUP_BREW_BUCKET_KEY:-}
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
     expose:
       - "3000"
     networks:

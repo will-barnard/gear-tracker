@@ -2,6 +2,7 @@
  * Stat calculation utilities for chart data and stat detail views.
  * Used by reusable stat components across the application.
  */
+import { parseDate, money, date } from './format'
 
 export const CHART_COLORS = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
@@ -16,13 +17,14 @@ export function buildTimeSeries(events) {
   const valid = events.filter(e => e.date)
   if (valid.length === 0) return { labels: [], data: [] }
 
-  const sorted = [...valid].sort((a, b) => new Date(a.date) - new Date(b.date))
+  const sorted = [...valid].sort((a, b) => parseDate(a.date) - parseDate(b.date))
 
   // Accumulate per month
   const monthly = new Map()
   let running = 0
   sorted.forEach(e => {
-    const d = new Date(e.date)
+    // parseDate, not new Date(): a purchase on the 1st must land in its own month.
+    const d = parseDate(e.date)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     running += e.value
     monthly.set(key, running)
@@ -30,8 +32,8 @@ export function buildTimeSeries(events) {
 
   // Fill in missing months
   const keys = Array.from(monthly.keys())
-  const start = new Date(keys[0] + '-01')
-  const end = new Date(keys[keys.length - 1] + '-01')
+  const start = parseDate(keys[0] + '-01')
+  const end = parseDate(keys[keys.length - 1] + '-01')
 
   const labels = []
   const data = []
@@ -106,7 +108,7 @@ export function buildDoughnutChartData(labels, data, colors) {
       data,
       backgroundColor: colors,
       borderWidth: 2,
-      borderColor: '#fff',
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#fff',
       hoverOffset: 6
     }]
   }
@@ -121,16 +123,9 @@ function hexToRgba(hex, alpha) {
 
 export function formatCurrency(value) {
   if (value == null || isNaN(value)) return '$0.00'
-  const abs = Math.abs(value)
-  const formatted = '$' + abs.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return value < 0 ? '-' + formatted : formatted
+  return money(value)
 }
 
 export function formatDate(dateStr) {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+  return date(dateStr)
 }

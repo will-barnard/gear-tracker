@@ -25,7 +25,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // A 401 from a login attempt is just "wrong password" — don't redirect.
+    if (error.response?.status === 401 && !error.config?.url?.startsWith('/auth/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'

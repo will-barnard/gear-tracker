@@ -1,219 +1,95 @@
 <template>
-  <div class="bundles-view">
+  <div>
     <NavBar />
-    
-    <div class="container">
-      <div class="bundles-header">
-        <h2>Bundles</h2>
-        <router-link to="/bundles/new" class="btn btn-primary">Add Bundle</router-link>
-      </div>
-      
-      <div v-if="bundleStore.loading" class="loading">Loading...</div>
-      
-      <div v-else-if="bundles.length === 0" class="empty-state card">
-        <p>No bundles yet. Create your first bundle to track bulk purchases!</p>
-      </div>
-      
-      <div v-else class="bundles-grid">
-        <div v-for="bundle in bundles" :key="bundle.id" class="bundle-card card">
-          <div class="bundle-header">
-            <h3>{{ bundle.name }}</h3>
-            <div class="badges">
-              <span class="type-badge" :class="bundle.type">{{ bundle.type === 'buy' ? 'Buy' : 'Sell' }}</span>
-              <span class="status-badge" :class="bundle.status">{{ bundle.status }}</span>
-            </div>
+    <main class="page">
+      <div class="page-header">
+        <div>
+          <h2>Bundles</h2>
+          <p class="sub">Lots you bought together, or sold together.</p>
+        </div>
+        <div class="page-actions">
+          <div class="segmented" role="group" aria-label="Show">
+            <button :class="{ active: show === 'active' }" @click="show = 'active'">Active</button>
+            <button :class="{ active: show === 'complete' }" @click="show = 'complete'">Complete</button>
+            <button :class="{ active: show === 'all' }" @click="show = 'all'">All</button>
           </div>
-          
-          <div class="bundle-details">
-            <p v-if="bundle.type === 'buy' && bundle.purchasePrice">
-              <strong>Purchase Price:</strong> ${{ parseFloat(bundle.purchasePrice).toFixed(2) }}
-            </p>
-            <p v-if="bundle.type === 'buy' && bundle.purchaseDate">
-              <strong>Purchase Date:</strong> {{ new Date(bundle.purchaseDate).toLocaleDateString() }}
-            </p>
-            <p v-if="bundle.type === 'sell' && bundle.salePrice">
-              <strong>Sale Price:</strong> ${{ parseFloat(bundle.salePrice).toFixed(2) }}
-            </p>
-            <p v-if="bundle.type === 'sell' && bundle.saleDate">
-              <strong>Sale Date:</strong> {{ new Date(bundle.saleDate).toLocaleDateString() }}
-            </p>
-            <p>
-              <strong>Items:</strong> {{ bundle.items?.length || 0 }}
-            </p>
-            <p v-if="bundle.items?.length">
-              <strong>Owned:</strong> {{ bundle.items.filter(i => i.status === 'owned').length }} | 
-              <strong>Sold:</strong> {{ bundle.items.filter(i => i.status === 'sold').length }}
-            </p>
-          </div>
-          
-          <div class="bundle-actions">
-            <router-link :to="`/bundles/${bundle.id}`" class="btn btn-secondary">View</router-link>
-            <router-link :to="`/bundles/${bundle.id}/edit`" class="btn btn-primary">Edit</router-link>
-          </div>
+          <router-link to="/bundles/new" class="btn btn-primary"><AppIcon name="plus" :size="16" /> New bundle</router-link>
         </div>
       </div>
-    </div>
+
+      <div v-if="bundleStore.loading && !bundles.length" class="loading-block"><div class="spinner"></div></div>
+
+      <div v-else-if="!visible.length" class="empty-state card">
+        <AppIcon name="package" :size="32" class="icon" />
+        <p v-if="bundles.length">No {{ show }} bundles.</p>
+        <p v-else>No bundles yet. Make one when you buy a lot of gear for one price — the cost gets split across the items.</p>
+      </div>
+
+      <div v-else class="bundles-grid">
+        <router-link v-for="bundle in visible" :key="bundle.id" :to="`/bundles/${bundle.id}`" class="bundle-card card card-link">
+          <div class="cover thumb">
+            <img v-if="bundle.coverPhoto" :src="fileUrl(bundle.coverPhoto.thumb)" :alt="bundle.name" loading="lazy" />
+            <AppIcon v-else name="package" :size="26" />
+          </div>
+          <div class="body">
+            <div class="badges">
+              <span class="badge" :class="bundle.type">{{ bundle.type === 'buy' ? 'Buy' : 'Sell' }}</span>
+              <span class="badge" :class="bundle.status">{{ bundle.status === 'complete' ? 'Complete' : 'Active' }}</span>
+              <span v-if="bundle.allocation === 'partial'" class="badge warn" title="Some items have cost weights and some don't">Rebalance</span>
+            </div>
+            <h3>{{ bundle.name }}</h3>
+            <p class="meta">
+              <span class="money">{{ money(bundle.type === 'buy' ? bundle.purchasePrice : bundle.salePrice, { whole: true }) }}</span>
+              <span v-if="bundle.type === 'buy' ? bundle.purchaseDate : bundle.saleDate"> · {{ date(bundle.type === 'buy' ? bundle.purchaseDate : bundle.saleDate) }}</span>
+            </p>
+            <div class="progress-row">
+              <span class="small muted">{{ soldCount(bundle) }} of {{ bundle.items?.length || 0 }} sold</span>
+              <div class="meter"><div :style="{ width: pctSold(bundle) + '%' }"></div></div>
+            </div>
+          </div>
+        </router-link>
+      </div>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useBundleStore } from '@/stores/bundle'
 import NavBar from '@/components/NavBar.vue'
+import AppIcon from '@/components/AppIcon.vue'
+import { fileUrl } from '@/services/attachments'
+import { money, date, errorMessage } from '@/utils/format'
+import { toastError } from '@/composables/useNotify'
 
 const bundleStore = useBundleStore()
-const bundles = ref([])
+const bundles = computed(() => bundleStore.bundles)
+const show = ref('active')
+const visible = computed(() => show.value === 'all' ? bundles.value : bundles.value.filter((b) => b.status === show.value))
+
+const soldCount = (b) => (b.items || []).filter((i) => i.status === 'sold').length
+const pctSold = (b) => (b.items?.length ? Math.round((soldCount(b) / b.items.length) * 100) : 0)
 
 onMounted(async () => {
-  bundles.value = await bundleStore.fetchBundles()
+  try {
+    await bundleStore.fetchBundles()
+  } catch (err) {
+    toastError(errorMessage(err, "Couldn't load bundles"))
+  }
 })
 </script>
 
 <style scoped>
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
-}
-
-@media (min-width: 769px) {
-  .container {
-    padding: 2rem;
-  }
-}
-
-.bundles-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.bundles-header h2 {
-  font-size: 1.5rem;
-}
-
-@media (min-width: 769px) {
-  .bundles-header {
-    margin-bottom: 2rem;
-  }
-}
-
-.loading {
-  text-align: center;
-  padding: 3rem;
-  color: var(--text-secondary);
-}
-
-.empty-state {
-  text-align: center;
-  padding: 3rem 1.5rem;
-  color: var(--text-secondary);
-}
-
-.bundles-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-
-@media (min-width: 640px) {
-  .bundles-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1024px) {
-  .bundles-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.bundle-card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.bundle-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 0.5rem;
-}
-
-.bundle-header h3 {
-  flex: 1;
-  margin: 0;
-  font-size: 1.125rem;
-  word-break: break-word;
-}
-
-.badges {
-  display: flex;
-  gap: 0.25rem;
-  flex-direction: column;
-}
-
-.type-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.type-badge.buy {
-  background: #FEF3C7;
-  color: #92400E;
-}
-
-.type-badge.sell {
-  background: #E0E7FF;
-  color: #3730A3;
-}
-
-.status-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.status-badge.active {
-  background: #DBEAFE;
-  color: #1E40AF;
-}
-
-.status-badge.complete {
-  background: #D1FAE5;
-  color: #065F46;
-}
-
-.bundle-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.bundle-details p {
-  margin: 0;
-}
-
-.bundle-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.bundle-actions .btn {
-  flex: 1;
-  text-align: center;
-  text-decoration: none;
-}
+.bundles-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+@media (min-width: 640px) { .bundles-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; } }
+@media (min-width: 1024px) { .bundles-grid { grid-template-columns: repeat(3, 1fr); } }
+.bundle-card { padding: 0; overflow: hidden; display: flex; }
+.cover { width: 112px; min-height: 112px; border-radius: 0; flex: none; }
+.body { padding: 0.8rem 0.9rem; display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1; }
+.badges { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.body h3 { font-size: 0.975rem; font-weight: 650; overflow-wrap: anywhere; }
+.meta { font-size: 0.875rem; color: var(--text-muted); }
+.progress-row { margin-top: auto; padding-top: 0.25rem; }
+.meter { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 0.3rem; overflow: hidden; }
+.meter > div { height: 100%; background: var(--success); }
 </style>

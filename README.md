@@ -12,7 +12,12 @@ A comprehensive web application for tracking music gear flipping and reselling i
 - **Advanced Filtering** - Search and filter items by status, category, price range, and more
 - **Quick Add Flow** - Add items quickly with minimal information, fill in details later
 - **Dashboard** - View inventory summary, total investment, revenue, and profit/loss
-- **Responsive Design** - Works on desktop and mobile devices
+- **Photos & Files** - Photos, receipts and PDFs on items and bundles, stored in brew-bucket. Photos are resized (and stripped of EXIF/GPS) in the browser before upload
+- **Bundles** - Buy lots for one price and split the cost evenly or by value; sell several items as one lot
+- **Keep vs Flip** - Mark keepers and track their estimated value alongside cost basis
+- **Listings & Fees** - Listing platform, link and date (with a 60+ day stale view); sale fees and shipping so profit is net
+- **Nightly Backups** - pg_dump streamed to brew-bucket's backups bucket
+- **Responsive Design** - Works on desktop and mobile devices, light and dark
 
 ## Tech Stack
 
@@ -129,6 +134,22 @@ A comprehensive web application for tracking music gear flipping and reselling i
    docker-compose down
    ```
 
+### Configuration (backend env)
+
+| Variable | Purpose |
+|---|---|
+| `APP_TIMEZONE` | Owner's timezone (default `America/Chicago`) — decides "today" and the backup hour |
+| `ALLOW_REGISTRATION` | Sign-up closes after the first account; `true` reopens it |
+| `BREW_BUCKET_URL` / `BREW_BUCKET_KEY` | File storage. Key needs read + write + delete, restricted to the uploads bucket. Without these, uploads return 501 and the rest of the app works |
+| `BREW_BUCKET_BUCKET` / `BREW_BUCKET_PREFIX` | Default `uploads` / `gear-tracker`. Keys are `<prefix>/<userId>/<attachmentId>/<file>` |
+| `ATTACHMENT_MAX_MB` | Per-file limit (default 25). nginx allows 30m — raise both together |
+| `BACKUP_BREW_BUCKET_KEY` | Nightly backups. Separate key: read + write on the backups bucket only |
+| `BACKUP_HOUR` | Local hour for the nightly dump (default 3) |
+
+### Database Migrations
+
+Schema changes are numbered SQL files in `backend/src/db/migrations/`, applied in order on every boot and recorded in `schema_migrations`. `sequelize.sync()` still creates missing tables first (fresh installs). To add a change, add the next `NNN_name.sql` — make it idempotent where it touches columns sync may already have created. Run without starting the API: `npm run migrate` in `backend/`.
+
 ### Database Management
 
 **Backup database:**
@@ -153,13 +174,33 @@ chmod +x database/restore.sh
 
 ### Item Endpoints
 
-- `GET /api/items` - Get all items with filtering
-  - Query params: `status`, `categoryId`, `search`, `minPrice`, `maxPrice`, `sortBy`, `sortOrder`, `page`, `limit`
+- `GET /api/items` - Get all items with filtering. Every item includes `costing` (cost basis, sale, fees, profit, ROI, days held/listed) and `coverPhoto`
+  - Query params: `status` (comma-separated ok), `categoryId` (`none` for uncategorized), `intent`, `bundleId`, `listedBefore`, `search`, `sortBy` (`date`, `cost`, `name`, `createdAt`, `updatedAt`, `listedAt`), `sortOrder`, `page`, `limit`
 - `GET /api/items/:id` - Get single item
 - `POST /api/items` - Create new item
 - `PUT /api/items/:id` - Update item
 - `DELETE /api/items/:id` - Delete item
-- `GET /api/items/stats/summary` - Get inventory statistics
+- `GET /api/items/stats/summary` - Dashboard numbers by status, keepers, stale listings
+- `GET /api/items/stats/detail` - Every item with costing, for charts
+
+### Bundle Endpoints
+
+- `GET /api/bundles`, `GET /api/bundles/:id` (items with costing, stats, attachments), `POST`, `PUT`, `DELETE` (empty bundles only)
+- `POST /api/bundles/:id/rebalance` - Weight each item's share of the cost by its sale/asking price
+- `DELETE /api/bundles/:id/rebalance` - Back to an even split
+
+### Attachment Endpoints
+
+- `POST /api/items/:id/attachments`, `POST /api/bundles/:id/attachments` - multipart: `kind` (photo|document), `caption`, `width`, `height`, `file`, optional `thumb`
+- `PATCH /api/attachments/:id` - `{ caption }`
+- `POST /api/attachments/reorder` - `{ ids }` (first photo is the cover)
+- `DELETE /api/attachments/:id`
+- `GET /api/files/:id/:variant` - `original` | `thumb` | `download`; signed URLs come back on every attachment, no auth header needed
+
+### Data Endpoints
+
+- `GET /api/data/export`, `POST /api/data/import`
+- `GET /api/data/backups`, `POST /api/data/backups` - owner account only
 
 ### Category Endpoints
 

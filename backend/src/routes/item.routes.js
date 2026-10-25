@@ -1,216 +1,196 @@
 const express = require('express');
-const { body, query, validationResult } = require('express-validator');
 const authMiddleware = require('../middleware/auth.middleware');
-const { Item, Category, AdditionalCost, Bundle } = require('../models');
+const { Item, Category, AdditionalCost, Bundle, Attachment, sequelize } = require('../models');
 const { Sequelize, Op } = require('sequelize');
+const costing = require('../services/costing');
+const att = require('../services/attachments');
+const { normalizeItem } = require('../services/fields');
+const { httpError } = require('../services/http-error');
 
 const router = express.Router();
 
-const validateRequest = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+const BUNDLE_ATTRS = ['id', 'name', 'type', 'status', 'purchasePrice', 'purchaseDate', 'purchaseLocation', 'salePrice', 'saleDate', 'saleLocation', 'saleFees', 'saleShipping'];
+
+const belongsToIncludes = [
+  { model: Category, as: 'category' },
+  { model: Bundle, as: 'purchaseBundle', attributes: BUNDLE_ATTRS, required: false },
+  { model: Bundle, as: 'saleBundle', attributes: BUNDLE_ATTRS, required: false }
+];
+
+// Attach costs, costing and cover photos to a list of Item rows. Costs are
+// loaded in one query rather than as a hasMany include: with subQuery:false a
+// hasMany join made LIMIT count cost rows, so pages came up short and the last
+// item on a page could lose some of its costs.
+async function enrich(rows, userId, { ctx } = {}) {
+  const ids = rows.map((r) => r.id);
+  const costs = ids.length
+    ? await AdditionalCost.findAll({ where: { itemId: ids }, order: [['date', 'DESC'], ['createdAt', 'DESC']] })
+    : [];
+  const byItem = new Map();
+  for (const c of costs) {
+    if (!byItem.has(c.itemId)) byItem.set(c.itemId, []);
+    byItem.get(c.itemId).push(c.get({ plain: true }));
   }
-  next();
+  const context = ctx || await costing.loadContext(sequelize, userId);
+  const covers = await att.coversFor('item', ids);
+  return rows.map((r) => {
+    const plain = typeof r.get === 'function' ? r.get({ plain: true }) : r;
+    plain.additionalCosts = byItem.get(plain.id) || [];
+    plain.costing = costing.computeItem(plain, context);
+    plain.coverPhoto = covers.get(plain.id) || null;
+    return plain;
+  });
+}
+
+async function loadDetail(id, userId) {
+  const item = await Item.findOne({ where: { id, userId }, include: belongsToIncludes });
+  if (!item) return null;
+  const [plain] = await enrich([item], userId);
+  plain.attachments = await att.listFor('item', id);
+  return plain;
+}
+
+// Sort: "date" is the effective date — when it sold, else when it was bought,
+// taking bundle dates over item dates.
+const EFFECTIVE_DATE = `COALESCE(
+  (SELECT b.sale_date FROM bundles b WHERE b.id = "Item".sale_bundle_id),
+  "Item".sale_date,
+  (SELECT b.purchase_date FROM bundles b WHERE b.id = "Item".purchase_bundle_id),
+  "Item".purchase_date)`;
+
+// Base cost in SQL, mirroring services/costing.js, so "sort by cost" works
+// across pages. (Additional costs aren't included — this orders by what you paid.)
+const BASE_COST = `CASE WHEN "Item".purchase_bundle_id IS NULL THEN COALESCE("Item".purchase_price, 0) ELSE (
+  SELECT CASE
+    WHEN COUNT(*) FILTER (WHERE i2.cost_weight > 0) = COUNT(*) AND SUM(i2.cost_weight) > 0
+      THEN COALESCE(b.purchase_price, 0) * COALESCE("Item".cost_weight, 0) / SUM(i2.cost_weight)
+    ELSE COALESCE(b.purchase_price, 0) / COUNT(*)
+  END
+  FROM bundles b JOIN items i2 ON i2.purchase_bundle_id = b.id
+  WHERE b.id = "Item".purchase_bundle_id
+  GROUP BY b.purchase_price) END`;
+
+const SORTS = {
+  date: EFFECTIVE_DATE,
+  purchaseDate: EFFECTIVE_DATE, // old name, kept for saved links
+  cost: BASE_COST,
+  purchasePrice: BASE_COST,
+  name: '"Item".name',
+  createdAt: '"Item".created_at',
+  updatedAt: '"Item".updated_at',
+  listedAt: '"Item".listed_at'
 };
 
 // Get all items with filtering
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
     const {
-      status,
-      categoryId,
-      search,
-      minPrice,
-      maxPrice,
-      sortBy = 'createdAt',
-      sortOrder = 'DESC',
-      page = 1,
-      limit = 50
+      status, categoryId, search, intent, bundleId, listedBefore,
+      sortBy = 'date', sortOrder = 'DESC'
     } = req.query;
-    
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+
     const where = { userId: req.user.id };
-    
-    // Status filter
-    if (status) {
-      where.status = status;
-    }
-    
-    // Category filter
-    if (categoryId) {
-      where.categoryId = categoryId;
-    }
-    
-    // Search filter
+    if (status) where.status = String(status).split(',');
+    if (categoryId) where.categoryId = categoryId === 'none' ? null : categoryId;
+    if (intent) where.intent = intent;
+    if (bundleId) where[Op.and] = [{ [Op.or]: [{ purchaseBundleId: bundleId }, { saleBundleId: bundleId }] }];
+    if (listedBefore) where.listedAt = { [Op.lte]: listedBefore };
     if (search) {
-      where[Op.or] = [
-        { name: { [Op.iLike]: `%${search}%` } },
-        { brand: { [Op.iLike]: `%${search}%` } },
-        { model: { [Op.iLike]: `%${search}%` } },
-        { description: { [Op.iLike]: `%${search}%` } }
-      ];
+      const term = `%${String(search).trim()}%`;
+      where[Op.or] = ['name', 'brand', 'model', 'description', 'serialNumber', 'notes']
+        .map((f) => ({ [f]: { [Op.iLike]: term } }));
     }
-    
-    // Price filters
-    if (minPrice || maxPrice) {
-      where.purchasePrice = {};
-      if (minPrice) where.purchasePrice[Op.gte] = minPrice;
-      if (maxPrice) where.purchasePrice[Op.lte] = maxPrice;
-    }
-    
-    const offset = (page - 1) * limit;
-    
-    const includeOptions = [
-      { model: Category, as: 'category' },
-      { model: AdditionalCost, as: 'additionalCosts' },
-      { model: Bundle, as: 'purchaseBundle', attributes: ['id', 'name', 'purchaseDate'], required: false },
-      { model: Bundle, as: 'saleBundle', attributes: ['id', 'name', 'saleDate'], required: false }
+
+    const dir = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const sortSql = SORTS[sortBy] || EFFECTIVE_DATE;
+    const order = [
+      [Sequelize.literal(`${sortSql} ${dir} NULLS LAST`)],
+      ['createdAt', 'DESC'],
+      ['id', 'ASC']
     ];
-    
-    // Sort by effective date: sell date (from bundle or item) first, then buy date if no sell date
-    // Cast all to DATE since Item uses timestamp and Bundle uses DATEONLY
-    const safeOrder = sortOrder === 'ASC' ? 'ASC' : 'DESC';
-    let orderClause;
-    if (sortBy === 'purchaseDate') {
-      orderClause = [Sequelize.literal(`COALESCE((SELECT b.sale_date::date FROM bundles b WHERE b.id = "Item".sale_bundle_id), "Item".sale_date::date, (SELECT b.purchase_date::date FROM bundles b WHERE b.id = "Item".purchase_bundle_id), "Item".purchase_date::date) ${safeOrder} NULLS LAST`)];
-    } else {
-      orderClause = [[sortBy, safeOrder]];
-    }
-    
+
     const { count, rows } = await Item.findAndCountAll({
       where,
-      include: includeOptions,
-      order: orderClause,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      subQuery: false
+      include: belongsToIncludes,
+      order,
+      limit,
+      offset: (page - 1) * limit,
+      distinct: true
     });
-    
+
     res.json({
-      items: rows,
-      pagination: {
-        total: count,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(count / limit)
-      }
+      items: await enrich(rows, req.user.id),
+      pagination: { total: count, page, limit, totalPages: Math.ceil(count / limit) }
     });
   } catch (error) {
     next(error);
   }
 });
 
-// Get detailed stats data for charts and stat detail views
+// Everything, with costing, for charts and the stat detail pages.
 router.get('/stats/detail', authMiddleware, async (req, res, next) => {
   try {
-    const { sequelize } = require('../models');
-
-    const items = await Item.findAll({
+    const rows = await Item.findAll({
       where: { userId: req.user.id },
-      include: [
-        { model: Category, as: 'category' },
-        { model: AdditionalCost, as: 'additionalCosts' },
-        { model: Bundle, as: 'purchaseBundle' },
-        { model: Bundle, as: 'saleBundle' }
-      ],
+      include: belongsToIncludes,
       order: [['purchaseDate', 'ASC'], ['createdAt', 'ASC']]
     });
-
-    // Get bundle item counts for buy-bundle cost allocation
-    const bundleItemCounts = {};
-    const bundleRows = await sequelize.query(`
-      SELECT b.id as bundle_id, COUNT(i.*) as item_count
-      FROM bundles b
-      LEFT JOIN items i ON i.purchase_bundle_id = b.id
-      WHERE b.user_id = :userId AND b.type = 'buy'
-      GROUP BY b.id
-    `, {
-      replacements: { userId: req.user.id },
-      type: sequelize.QueryTypes.SELECT
+    const items = await enrich(rows, req.user.id);
+    res.json({
+      items: items.map((it) => ({
+        id: it.id,
+        name: it.name,
+        brand: it.brand,
+        model: it.model,
+        status: it.status,
+        intent: it.intent,
+        condition: it.condition,
+        category: it.category ? { id: it.category.id, name: it.category.name, color: it.category.color } : null,
+        purchaseDate: it.costing.purchaseDate,
+        saleDate: it.costing.saleDate,
+        purchasePrice: it.costing.baseCost,
+        salePrice: it.costing.grossSale || 0,
+        expectedSalePrice: Number(it.expectedSalePrice || 0),
+        estimatedValue: it.estimatedValue == null ? null : Number(it.estimatedValue),
+        isListedOnline: !!it.isListedOnline,
+        listedAt: it.listedAt,
+        effectiveCost: it.costing.totalCost,
+        additionalCostTotal: it.costing.adjustments,
+        // Net of fees. 0 when there's neither a sale nor an estimate.
+        effectiveSalePrice: it.costing.netSale || 0,
+        saleFees: it.costing.saleFees,
+        profit: it.costing.profit,
+        roi: it.costing.roi,
+        daysHeld: it.costing.daysHeld,
+        daysListed: it.costing.daysListed,
+        currentValue: it.costing.currentValue,
+        coverPhoto: it.coverPhoto,
+        createdAt: it.createdAt
+      }))
     });
-    bundleRows.forEach(row => {
-      bundleItemCounts[row.bundle_id] = parseInt(row.item_count);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Inventory summary for the dashboard.
+router.get('/stats/summary', authMiddleware, async (req, res, next) => {
+  try {
+    const rows = await Item.findAll({ where: { userId: req.user.id }, include: belongsToIncludes });
+    const items = await enrich(rows, req.user.id);
+    const keepers = items.filter((i) => i.intent === 'keep' && i.status !== 'sold');
+    res.json({
+      stats: costing.summarize(items),
+      keepers: {
+        count: keepers.length,
+        cost: Math.round(keepers.reduce((s, i) => s + i.costing.totalCost, 0) * 100) / 100,
+        value: Math.round(keepers.reduce((s, i) => s + (i.costing.currentValue || 0), 0) * 100) / 100,
+        estimated: keepers.filter((i) => i.costing.valueIsEstimate).length
+      },
+      staleListings: items.filter((i) => i.status === 'for_sale' && (i.costing.daysListed || 0) >= 60).length
     });
-
-    // Get sell bundle prices
-    const sellBundles = await Bundle.findAll({
-      where: { userId: req.user.id, type: 'sell', salePrice: { [Op.not]: null } }
-    });
-    const sellBundlePrices = {};
-    sellBundles.forEach(b => {
-      sellBundlePrices[b.id] = parseFloat(b.salePrice || 0);
-    });
-
-    // Count items per sell bundle for allocation
-    const sellBundleItemCounts = {};
-    items.forEach(item => {
-      if (item.saleBundleId) {
-        sellBundleItemCounts[item.saleBundleId] = (sellBundleItemCounts[item.saleBundleId] || 0) + 1;
-      }
-    });
-
-    // Enrich items with computed costs
-    const enrichedItems = items.map(item => {
-      const plain = item.toJSON();
-
-      // Effective purchase cost
-      let effectiveCost = 0;
-      if (plain.purchaseBundleId && plain.purchaseBundle) {
-        // Use item's own purchasePrice if rebalanced, otherwise divide evenly
-        if (plain.purchasePrice && parseFloat(plain.purchasePrice) > 0) {
-          effectiveCost = parseFloat(plain.purchasePrice);
-        } else {
-          const count = bundleItemCounts[plain.purchaseBundleId] || 1;
-          effectiveCost = parseFloat(plain.purchaseBundle.purchasePrice || 0) / count;
-        }
-      } else {
-        effectiveCost = parseFloat(plain.purchasePrice || 0);
-      }
-
-      // Additional costs
-      const additionalCostTotal = (plain.additionalCosts || []).reduce((sum, cost) => {
-        const amount = parseFloat(cost.amount || 0);
-        return sum + (cost.type === 'income' ? -amount : amount);
-      }, 0);
-      effectiveCost += additionalCostTotal;
-
-      // Effective sale price (accounting for sell bundles and for_sale status)
-      let effectiveSalePrice = 0;
-      if (plain.saleBundleId) {
-        // Item is in a sell bundle — allocate bundle sale price equally
-        const bundlePrice = sellBundlePrices[plain.saleBundleId] || 0;
-        const count = sellBundleItemCounts[plain.saleBundleId] || 1;
-        effectiveSalePrice = bundlePrice / count;
-      } else if (plain.status === 'sold') {
-        // Sold individually — use actual sale price
-        effectiveSalePrice = parseFloat(plain.salePrice || 0);
-      } else if (plain.status === 'for_sale') {
-        // For sale individually — use asking price (expectedSalePrice)
-        effectiveSalePrice = parseFloat(plain.expectedSalePrice || 0);
-      }
-
-      return {
-        id: plain.id,
-        name: plain.name,
-        brand: plain.brand,
-        model: plain.model,
-        status: plain.status,
-        condition: plain.condition,
-        purchaseDate: plain.purchaseDate,
-        saleDate: plain.saleDate,
-        purchasePrice: parseFloat(plain.purchasePrice || 0),
-        salePrice: parseFloat(plain.salePrice || 0),
-        expectedSalePrice: parseFloat(plain.expectedSalePrice || 0),
-        isListedOnline: plain.isListedOnline || false,
-        category: plain.category ? { id: plain.category.id, name: plain.category.name } : null,
-        effectiveCost: Math.round(effectiveCost * 100) / 100,
-        additionalCostTotal: Math.round(additionalCostTotal * 100) / 100,
-        effectiveSalePrice: Math.round(effectiveSalePrice * 100) / 100,
-        createdAt: plain.createdAt
-      };
-    });
-
-    res.json({ items: enrichedItems });
   } catch (error) {
     next(error);
   }
@@ -219,118 +199,46 @@ router.get('/stats/detail', authMiddleware, async (req, res, next) => {
 // Get single item
 router.get('/:id', authMiddleware, async (req, res, next) => {
   try {
-    const item = await Item.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-      include: [
-        { model: Category, as: 'category' },
-        { model: AdditionalCost, as: 'additionalCosts' },
-        { model: Bundle, as: 'purchaseBundle' },
-        { model: Bundle, as: 'saleBundle' }
-      ]
-    });
-    
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-    
+    const item = await loadDetail(req.params.id, req.user.id);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
     res.json(item);
   } catch (error) {
     next(error);
   }
 });
 
-// Create item (quick add - minimal required fields)
-router.post('/',
-  authMiddleware,
-  [body('name').trim().notEmpty()],
-  validateRequest,
-  async (req, res, next) => {
-    try {
-      const itemData = {
-        ...req.body,
-        userId: req.user.id
-      };
-      
-      // If item is in a purchase bundle, set purchaseDate from bundle
-      if (itemData.purchaseBundleId) {
-        const bundle = await Bundle.findByPk(itemData.purchaseBundleId);
-        if (bundle && bundle.purchaseDate) {
-          itemData.purchaseDate = bundle.purchaseDate;
-        }
-      }
-      
-      // If item is in a sale bundle, set saleDate from bundle
-      if (itemData.saleBundleId) {
-        const bundle = await Bundle.findByPk(itemData.saleBundleId);
-        if (bundle && bundle.saleDate) {
-          itemData.saleDate = bundle.saleDate;
-        }
-      }
-      
-      const item = await Item.create(itemData);
-      
-      res.status(201).json(item);
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// Update item
-router.put('/:id', authMiddleware, async (req, res, next) => {
+// Create item (quick add - only a name is required)
+router.post('/', authMiddleware, async (req, res, next) => {
   try {
-    const item = await Item.findOne({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-    
-    const updateData = { ...req.body };
-    
-    // If purchaseBundleId is being set or changed, update purchaseDate from bundle
-    if (updateData.purchaseBundleId && updateData.purchaseBundleId !== item.purchaseBundleId) {
-      const bundle = await Bundle.findByPk(updateData.purchaseBundleId);
-      if (bundle && bundle.purchaseDate) {
-        updateData.purchaseDate = bundle.purchaseDate;
-      }
-    }
-    
-    // If saleBundleId is being set or changed, update saleDate from bundle
-    if (updateData.saleBundleId && updateData.saleBundleId !== item.saleBundleId) {
-      const bundle = await Bundle.findByPk(updateData.saleBundleId);
-      if (bundle && bundle.saleDate) {
-        updateData.saleDate = bundle.saleDate;
-      }
-    }
-    
-    await item.update(updateData);
-    
-    const updatedItem = await Item.findByPk(item.id, {
-      include: [
-        { model: Category, as: 'category' },
-        { model: AdditionalCost, as: 'additionalCosts' }
-      ]
-    });
-    
-    res.json(updatedItem);
+    const data = await normalizeItem(req.body, { userId: req.user.id });
+    if (!data.name) throw httpError(400, 'Name is required');
+    const item = await Item.create({ ...data, userId: req.user.id });
+    res.status(201).json(await loadDetail(item.id, req.user.id));
   } catch (error) {
     next(error);
   }
 });
 
-// Delete item
+// Update item — partial updates are fine; only the fields sent change.
+router.put('/:id', authMiddleware, async (req, res, next) => {
+  try {
+    const item = await Item.findOne({ where: { id: req.params.id, userId: req.user.id } });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    const data = await normalizeItem(req.body, { userId: req.user.id, existing: item });
+    await item.update(data);
+    res.json(await loadDetail(item.id, req.user.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete item, its costs (FK cascade) and its stored files.
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
-    const item = await Item.findOne({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-    
+    const item = await Item.findOne({ where: { id: req.params.id, userId: req.user.id } });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    const files = await Attachment.findAll({ where: { itemId: item.id } });
+    await att.destroyAttachments(files);
     await item.destroy();
     res.status(204).send();
   } catch (error) {
@@ -338,169 +246,6 @@ router.delete('/:id', authMiddleware, async (req, res, next) => {
   }
 });
 
-// Get inventory summary
-router.get('/stats/summary', authMiddleware, async (req, res, next) => {
-  try {
-    const { sequelize, Bundle } = require('../models');
-    
-    // Get all items with their bundles
-    const items = await Item.findAll({
-      where: { userId: req.user.id },
-      attributes: { 
-        exclude: [] // Let Sequelize handle missing columns gracefully
-      },
-      include: [
-        { model: Bundle, as: 'purchaseBundle' },
-        { model: Bundle, as: 'saleBundle' },
-        { model: AdditionalCost, as: 'additionalCosts' }
-      ],
-      raw: false
-    });
-    
-    // Get all sell bundles to track their revenue
-    const sellBundles = await Bundle.findAll({
-      where: { 
-        userId: req.user.id,
-        type: 'sell',
-        salePrice: { [Op.not]: null }
-      }
-    });
-    
-    // Calculate stats manually to account for bundles
-    const statsByStatus = {
-      owned: { count: 0, totalInvestment: 0, totalSalePrice: 0 },
-      for_sale: { count: 0, totalInvestment: 0, totalSalePrice: 0 },
-      sold: { count: 0, totalInvestment: 0, totalSalePrice: 0 }
-    };
-    
-    // Get bundle item counts for cost allocation (only for buy bundles)
-    const bundleItemCounts = {};
-    const bundleItems = await sequelize.query(`
-      SELECT b.id as bundle_id, b.type, COUNT(i.*) as item_count
-      FROM bundles b
-      LEFT JOIN items i ON i.purchase_bundle_id = b.id
-      WHERE b.user_id = :userId AND b.type = 'buy'
-      GROUP BY b.id, b.type
-    `, {
-      replacements: { userId: req.user.id },
-      type: sequelize.QueryTypes.SELECT
-    });
-    
-    bundleItems.forEach(row => {
-      bundleItemCounts[row.bundle_id] = {
-        count: parseInt(row.item_count),
-        type: row.type
-      };
-    });
-    
-    items.forEach(item => {
-      const status = item.status;
-      statsByStatus[status].count++;
-      
-      // Calculate item cost
-      let itemCost = 0;
-      if (item.purchaseBundleId && item.purchaseBundle) {
-        const bundleInfo = bundleItemCounts[item.purchaseBundleId];
-        if (bundleInfo && bundleInfo.type === 'buy') {
-          // Use item's own purchasePrice if rebalanced, otherwise divide evenly
-          if (item.purchasePrice && parseFloat(item.purchasePrice) > 0) {
-            itemCost = parseFloat(item.purchasePrice);
-          } else {
-            const bundlePrice = parseFloat(item.purchaseBundle.purchasePrice || 0);
-            const itemCount = bundleInfo.count || 1;
-            itemCost = bundlePrice / itemCount;
-          }
-        } else {
-          // Fallback to individual purchase price
-          itemCost = parseFloat(item.purchasePrice || 0);
-        }
-      } else {
-        // Individual item: use its purchase price
-        itemCost = parseFloat(item.purchasePrice || 0);
-      }
-      
-      // Add additional costs (expenses add, income subtracts)
-      const additionalCosts = item.additionalCosts?.reduce((sum, cost) => {
-        const amount = parseFloat(cost.amount || 0);
-        return sum + (cost.type === 'income' ? -amount : amount);
-      }, 0) || 0;
-      
-      statsByStatus[status].totalInvestment += itemCost + additionalCosts;
-      
-      // For items in sell bundles, don't count individual sale prices
-      // The bundle sale price will be counted separately
-      if (item.saleBundleId && item.saleBundle) {
-        // Don't add individual item sale price for sell bundles
-      } else {
-        // For sold items, use actual sale price; for for_sale items, use expected price
-        if (status === 'sold') {
-          statsByStatus[status].totalSalePrice += parseFloat(item.salePrice || 0);
-        } else if (status === 'for_sale') {
-          statsByStatus[status].totalSalePrice += parseFloat(item.expectedSalePrice || 0);
-        }
-      }
-    });
-    
-    // Add sell bundle revenues
-    sellBundles.forEach(bundle => {
-      const bundleItems = items.filter(item => item.saleBundleId === bundle.id);
-      if (bundleItems.length === 0) return;
-
-      const allSold = bundleItems.every(item => item.status === 'sold');
-      const allForSale = bundleItems.every(item => item.status === 'for_sale');
-      const hasMixedStatuses = !allSold && !allForSale;
-
-      if (allSold) {
-        // Completed sell bundle — count as sold revenue
-        statsByStatus.sold.totalSalePrice += parseFloat(bundle.salePrice || 0);
-      } else if (allForSale) {
-        // Sell bundle still for sale — count as expected for_sale revenue
-        statsByStatus.for_sale.totalSalePrice += parseFloat(bundle.salePrice || 0);
-      } else if (hasMixedStatuses) {
-        // Mixed statuses — allocate proportionally per item
-        const pricePerItem = parseFloat(bundle.salePrice || 0) / bundleItems.length;
-        bundleItems.forEach(item => {
-          statsByStatus[item.status].totalSalePrice += pricePerItem;
-        });
-      }
-    });
-    
-    // Format stats array
-    const enrichedStats = Object.entries(statsByStatus)
-      .filter(([_, data]) => data.count > 0)
-      .map(([status, data]) => ({
-        status,
-        count: data.count,
-        listedOnlineCount: items.filter(i => {
-          // Handle case where isListedOnline doesn't exist yet (migration not run)
-          return i.status === status && i.isListedOnline === true;
-        }).length,
-        totalPurchasePrice: data.totalInvestment - (data.totalAdditionalCosts || 0),
-        totalSalePrice: data.totalSalePrice,
-        totalAdditionalCosts: items
-          .filter(i => i.status === status)
-          .reduce((sum, item) => sum + (item.additionalCosts?.reduce((s, c) => {
-            const amount = parseFloat(c.amount || 0);
-            return s + (c.type === 'income' ? -amount : amount);
-          }, 0) || 0), 0),
-        totalInvestment: data.totalInvestment
-      }));
-    
-    res.json({
-      stats: enrichedStats
-    });
-  } catch (error) {
-    // Check if error is due to missing column (migration not run)
-    if (error.message && error.message.includes('is_listed_online')) {
-      console.error('❌ Migration required: is_listed_online column is missing');
-      console.error('Run: docker-compose exec backend node src/migrations/run-migrations.js');
-      return res.status(500).json({ 
-        error: 'Database migration required. Please run migrations.',
-        details: 'The is_listed_online column is missing. Run: docker-compose exec backend node src/migrations/run-migrations.js'
-      });
-    }
-    next(error);
-  }
-});
-
 module.exports = router;
+module.exports.enrich = enrich;
+module.exports.belongsToIncludes = belongsToIncludes;
